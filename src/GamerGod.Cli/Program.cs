@@ -55,6 +55,9 @@ try
         case "status":
             return await SessionCommands.StatusAsync();
 
+        case "bench":
+            return await BenchCommand.RunAsync(args);
+
         case "restore":
         {
             // The uninstaller runs this before removing anything, so it must be honest and
@@ -119,6 +122,8 @@ static void PrintUsage()
           off          Put it all back, and print a receipt
           status       Show whether Game Mode is on, and what it changed
 
+          bench        Measure whether any of it actually helps, on your hardware
+
           scan         Check this machine for things that cost you frames or block launches
           topology     Show this machine's performance domains and the routing plan
           summary      One-line topology summary
@@ -128,6 +133,9 @@ static void PrintUsage()
         OPTIONS
           --dry-run    With 'on': show exactly what would change, and change nothing
           --json       With 'topology': emit machine-readable JSON
+          --seconds N  With 'bench': seconds per run (default 30)
+          --runs N     With 'bench': runs per arm (default 5)
+          --pid N      With 'bench': measure a specific process
 
         'scan', 'topology' and 'status' only read - they change nothing.
 
