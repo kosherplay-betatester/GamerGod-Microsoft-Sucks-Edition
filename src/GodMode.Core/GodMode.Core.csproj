@@ -1,9 +1,21 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <!--
+      Pure domain logic: mutations, the ledger, policy, performance domains.
+      This project must never reference GodMode.Windows or make an OS call. That
+      restriction is what lets the ledger's crash-recovery property tests run against a
+      simulated machine, with no admin rights and no real state to damage.
+    -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      ContactGrant's factory is internal so a grant cannot be forged from elsewhere in the
+      product. The test suite needs access to prove the guard actually throws.
+    -->
+    <InternalsVisibleTo Include="GodMode.Core.Tests" />
+  </ItemGroup>
 
 </Project>
