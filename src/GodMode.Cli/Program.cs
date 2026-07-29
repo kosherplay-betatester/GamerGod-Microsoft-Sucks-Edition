@@ -35,6 +35,17 @@ try
             return 0;
         }
 
+        case "scan":
+        {
+            var snapshot = new WindowsMachineProbe().Capture();
+            var hazards = GodMode.Core.Diagnostics.HazardScanner.Scan(snapshot);
+            HazardRenderer.Render(hazards, Console.Out);
+
+            // Non-zero only for findings that block a game from launching or point at
+            // broken hardware, so this is usable as a health check in a script.
+            return hazards.Any(x => x.Severity == GodMode.Core.Diagnostics.HazardSeverity.High) ? 3 : 0;
+        }
+
         case "help":
         case "--help":
         case "-h":
@@ -70,6 +81,7 @@ static void PrintUsage()
 
         COMMANDS
           topology     Show this machine's performance domains and the routing plan (default)
+          scan         Check this machine for things that cost you frames or block launches
           summary      One-line topology summary
           help         Show this help
 
