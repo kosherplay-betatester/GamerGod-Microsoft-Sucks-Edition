@@ -78,6 +78,9 @@
                             <RadioButton x:Name="NavDashboard" Style="{StaticResource NavButton}"
                                          Content="Dashboard" IsChecked="True"
                                          Checked="Nav_Changed" Tag="Dashboard" />
+                            <RadioButton x:Name="NavLibrary" Style="{StaticResource NavButton}"
+                                         Content="Library"
+                                         Checked="Nav_Changed" Tag="Library" />
                             <RadioButton x:Name="NavMachine" Style="{StaticResource NavButton}"
                                          Content="Your machine"
                                          Checked="Nav_Changed" Tag="Machine" />
@@ -176,6 +179,29 @@
                                                Text="GamerGod will tell you what it changed. It will not tell you how many frames you gained, because it cannot measure that yet — and a number nobody measured is the thing that ruined this category. When the measurement harness lands you will get a real figure with error bars, and if it turns out to be zero, it will say zero." />
                                 </StackPanel>
                             </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- ============ Library ============ -->
+                    <ScrollViewer x:Name="PageLibrary" VerticalScrollBarVisibility="Auto"
+                                  Padding="26,22,26,26" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Eyebrow}" Text="LIBRARY" />
+                            <TextBlock Style="{StaticResource H1}" Text="Everything you play" />
+                            <TextBlock Style="{StaticResource BodyText}" Margin="0,7,0,0"
+                                       Text="Found by reading what your stores already keep on disk. Nothing is scraped, no account is touched, and nothing leaves this machine. Launching a game turns Game Mode on first, then hands off to the store so the game gets the environment it expects." />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                <Button Style="{StaticResource GhostButton}" Content="REFRESH"
+                                        Click="Library_Refresh" />
+                                <TextBlock x:Name="LibraryCount" Style="{StaticResource Mono}"
+                                           VerticalAlignment="Center" Margin="14,0,0,0" />
+                            </StackPanel>
+
+                            <ItemsControl x:Name="LibraryItems" Margin="0,18,0,0" />
+
+                            <TextBlock x:Name="LibraryEmpty" Style="{StaticResource BodyText}"
+                                       Margin="0,18,0,0" Visibility="Collapsed" />
                         </StackPanel>
                     </ScrollViewer>
 

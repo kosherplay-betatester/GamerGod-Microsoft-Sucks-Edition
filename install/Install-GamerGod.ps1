@@ -107,7 +107,46 @@ Then re-run this script, or pass -SourceRoot pointing at the output.
 '@
 }
 
+function Stop-RunningInstances {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    # Without this, upgrading over a running copy fails on a locked file and reports the name
+    # of a .NET internal - "cannot access clrjit.dll" - which tells the user nothing about the
+    # actual problem or how to fix it.
+    $running = @(Get-Process -Name 'GamerGod', 'gamergod', 'gmsvc' -ErrorAction SilentlyContinue)
+
+    if ($running.Count -eq 0) { return }
+
+    Write-Step "Closing $($running.Count) running GamerGod process(es)"
+
+    if (-not $PSCmdlet.ShouldProcess('running GamerGod processes', 'Close before upgrading')) { return }
+
+    foreach ($process in $running) {
+        try {
+            # Ask first. A window with unsaved settings deserves the chance to write them.
+            if ($process.MainWindowHandle -ne 0) {
+                [void] $process.CloseMainWindow()
+                [void] $process.WaitForExit(5000)
+            }
+
+            if (-not $process.HasExited) {
+                $process.Kill()
+                [void] $process.WaitForExit(5000)
+            }
+        }
+        catch {
+            Write-Warn "Could not close process $($process.Id): $($_.Exception.Message)"
+        }
+    }
+
+    # Windows releases file handles a moment after the process ends.
+    Start-Sleep -Milliseconds 600
+    Write-Ok 'Closed. Nothing GamerGod applied is affected - "off" and reboot both still work.'
+}
+
 function Install-Binaries {
+    [CmdletBinding(SupportsShouldProcess)]
     param([string] $Source)
 
     Write-Step "Installing binaries to $InstallRoot"
@@ -120,6 +159,9 @@ function Install-Binaries {
 }
 
 function Initialize-StateDirectory {
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
     Write-Step "Creating state directory at $StateRoot"
 
     if (-not $PSCmdlet.ShouldProcess($StateRoot, 'Create state directory with restricted ACL')) { return }
@@ -156,6 +198,7 @@ function Initialize-StateDirectory {
 }
 
 function Install-Service {
+    [CmdletBinding(SupportsShouldProcess)]
     param([string] $Root)
 
     $binary = Join-Path $Root 'gmsvc.exe'
@@ -195,7 +238,50 @@ function Install-Service {
     Write-Ok 'Registered, set to delayed automatic start, restarts on failure'
 }
 
+function Add-Shortcuts {
+    [CmdletBinding(SupportsShouldProcess)]
+    param([string] $Root)
+
+    $gui = Join-Path $Root 'app\GamerGod.exe'
+
+    if (-not (Test-Path $gui)) {
+        Write-Skip 'Desktop app not present in this build; no shortcuts created'
+        return
+    }
+
+    Write-Step 'Creating shortcuts'
+
+    if (-not $PSCmdlet.ShouldProcess('Start Menu and Desktop', 'Create shortcuts')) { return }
+
+    # Without these the app is installed and effectively invisible: nothing on the Start Menu,
+    # nothing on the desktop, and its executable buried a folder deeper than the command. That
+    # is exactly how it went the first time, and "look in Program Files" is not an answer.
+    $shell = New-Object -ComObject WScript.Shell
+
+    try {
+        $startMenu = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'GamerGod'
+        New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
+
+        foreach ($target in @(
+                @{ Path = (Join-Path $startMenu 'GamerGod.lnk'); Exe = $gui; Args = '' }
+                @{ Path = (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'GamerGod.lnk'); Exe = $gui; Args = '' }
+            )) {
+            $link = $shell.CreateShortcut($target.Path)
+            $link.TargetPath = $target.Exe
+            $link.WorkingDirectory = Split-Path -Parent $target.Exe
+            $link.Description = 'Give your game the machine you paid for'
+            $link.Save()
+        }
+
+        Write-Ok 'Start Menu and desktop shortcuts created'
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+    }
+}
+
 function Add-ToPath {
+    [CmdletBinding(SupportsShouldProcess)]
     param([string] $Root)
 
     if ($NoPath) { Write-Skip 'Skipping PATH (-NoPath)'; return }
@@ -223,10 +309,12 @@ Write-Host ''
 
 try {
     Test-Prerequisites
+    Stop-RunningInstances
     $source = Resolve-Source
     Install-Binaries -Source $source
     Initialize-StateDirectory
     Install-Service -Root $InstallRoot
+    Add-Shortcuts -Root $InstallRoot
     Add-ToPath -Root $InstallRoot
 
     Write-Host ''

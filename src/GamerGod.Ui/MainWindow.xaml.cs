@@ -10,6 +10,7 @@ using GamerGod.Core.Diagnostics;
 using GamerGod.Core.Engine;
 using GamerGod.Core.Hardware;
 using GamerGod.Core.Ledger;
+using GamerGod.Core.Library;
 using GamerGod.Core.Mutations;
 using GamerGod.Core.Policy;
 using GamerGod.Core.Safety;
@@ -26,6 +27,7 @@ public partial class MainWindow : Window
     private UiSettings _settings = UiSettings.Load();
     private CpuTopology? _topology;
     private bool _loading = true;
+    private bool _libraryLoaded;
 
     public MainWindow()
     {
@@ -341,6 +343,166 @@ public partial class MainWindow : Window
         ReceiptCard.Visibility = Visibility.Visible;
     }
 
+    // ---------------------------------------------------------------- library
+
+    private async void Library_Refresh(object sender, RoutedEventArgs e)
+    {
+        Tick();
+        await LoadLibraryAsync();
+    }
+
+    private async Task LoadLibraryAsync()
+    {
+        LibraryItems.Items.Clear();
+        LibraryEmpty.Visibility = Visibility.Collapsed;
+        LibraryCount.Text = "scanning…";
+
+        ImmutableArray<GameEntry> games;
+        try
+        {
+            games = await new WindowsGameLibrary().ScanAsync(default);
+        }
+        catch (Exception ex)
+        {
+            LibraryCount.Text = string.Empty;
+            LibraryEmpty.Text = $"The library could not be read: {ex.Message}";
+            LibraryEmpty.Visibility = Visibility.Visible;
+            return;
+        }
+
+        var titles = games.Count(g => g.Source != GameSource.Emulator);
+        var emulators = games.Length - titles;
+
+        LibraryCount.Text = $"{titles} game{(titles == 1 ? "" : "s")}, "
+                            + $"{emulators} emulator{(emulators == 1 ? "" : "s")}";
+
+        if (games.IsEmpty)
+        {
+            // Honest rather than blank. An empty grid reads as a broken feature.
+            LibraryEmpty.Text =
+                "Nothing found. GamerGod looks for Steam, Epic and GOG titles through the "
+                + "manifests those stores keep on disk, and for emulators it already knows "
+                + "about. If you have games installed somewhere else, they will not appear "
+                + "here yet — and GamerGod would rather show you nothing than invent a list.";
+            LibraryEmpty.Visibility = Visibility.Visible;
+            return;
+        }
+
+        foreach (var game in games)
+        {
+            LibraryItems.Items.Add(BuildGameCard(game));
+        }
+    }
+
+    private Border BuildGameCard(GameEntry game)
+    {
+        var isEmulator = game.Source == GameSource.Emulator;
+        var accent = (Brush)FindResource(isEmulator ? "Trace" : "Signal");
+
+        var head = new StackPanel { Orientation = Orientation.Horizontal };
+        head.Children.Add(Chip(game.SourceLabel.ToUpperInvariant(), accent, filled: false));
+        head.Children.Add(new TextBlock
+        {
+            Text = game.Name,
+            Style = (Style)FindResource("H2"),
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+
+        var body = new StackPanel();
+        body.Children.Add(head);
+
+        if (!game.Systems.IsDefaultOrEmpty)
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = string.Join("  ·  ", game.Systems),
+                Style = (Style)FindResource("Mono"),
+                Margin = new Thickness(0, 6, 0, 0),
+            });
+        }
+
+        // Emulators carry no anti-cheat, so every lever is available to them. Saying so is
+        // useful: it is the one place GamerGod can do its most aggressive work safely.
+        body.Children.Add(new TextBlock
+        {
+            Text = isEmulator
+                ? "No anti-cheat, so GamerGod can use every lever on this."
+                : "Game Mode turns on, then your store launches it.",
+            Style = (Style)FindResource("BodyText"),
+            FontSize = 12,
+            Margin = new Thickness(0, 6, 0, 0),
+        });
+
+        var play = new Button
+        {
+            Style = (Style)FindResource("GhostButton"),
+            Content = "PLAY",
+            Padding = new Thickness(18, 8, 18, 8),
+            VerticalAlignment = VerticalAlignment.Center,
+            Tag = game,
+        };
+        play.Click += Play_Click;
+
+        var layout = new Grid();
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        body.Margin = new Thickness(0, 0, 16, 0);
+        Grid.SetColumn(body, 0);
+        Grid.SetColumn(play, 1);
+        layout.Children.Add(body);
+        layout.Children.Add(play);
+
+        return new Border
+        {
+            Style = (Style)FindResource("Card"),
+            Margin = new Thickness(0, 0, 0, 10),
+            Padding = new Thickness(15),
+            Child = layout,
+        };
+    }
+
+    private async void Play_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not GameEntry game)
+        {
+            return;
+        }
+
+        // Arm first, then launch. The other order would start the game onto a machine that is
+        // still busy, which is the moment the confinement is most worth having.
+        if (MasterSwitch.IsChecked != true)
+        {
+            MasterSwitch.IsChecked = true;
+            await ApplyAsync(turnOn: true);
+        }
+
+        try
+        {
+            // UseShellExecute so a steam:// or com.epicgames.launcher:// URI reaches its handler.
+            // Launching a store title's executable directly is how third-party launchers break
+            // cloud saves and anti-cheat bootstrapping.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(game.LaunchTarget)
+            {
+                UseShellExecute = true,
+            });
+
+            _sounds.Play(UiSound.Confirm);
+        }
+        catch (Exception ex)
+        {
+            _sounds.Play(UiSound.Alert);
+            MessageBox.Show(
+                $"Could not launch {game.Name}.\n\n{ex.Message}\n\n"
+                + "Game Mode is still on — 'gamergod off' or rebooting undoes it.",
+                "GamerGod",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
     // ---------------------------------------------------------------- scan
 
     private void Scan_Click(object sender, RoutedEventArgs e)
@@ -529,10 +691,19 @@ public partial class MainWindow : Window
         var page = (sender as RadioButton)?.Tag as string ?? "Dashboard";
 
         PageDashboard.Visibility = page == "Dashboard" ? Visibility.Visible : Visibility.Collapsed;
+        PageLibrary.Visibility = page == "Library" ? Visibility.Visible : Visibility.Collapsed;
         PageMachine.Visibility = page == "Machine" ? Visibility.Visible : Visibility.Collapsed;
         PageSettings.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
 
         Tick();
+
+        // Scanned on first open rather than at startup: reading several stores' manifests
+        // should not delay the window appearing.
+        if (page == "Library" && LibraryItems.Items.Count == 0 && !_libraryLoaded)
+        {
+            _libraryLoaded = true;
+            _ = LoadLibraryAsync();
+        }
     }
 
     private void Tick()
