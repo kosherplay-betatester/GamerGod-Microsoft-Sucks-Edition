@@ -106,19 +106,33 @@ Some honest examples from our own ledger:
 
 ## Status
 
-🚧 **Early development.** Not yet usable. Building in the open from day one.
+🚧 **Early development.** The engine works and is verified on real hardware. It does not
+change anything yet — every command that exists today only reads.
 
-| Milestone | State |
+**125 tests**, including 500 randomised crash-recovery trials.
+
+| Component | State |
 |---|---|
 | Charter, spec, architecture | ✅ Done |
-| Performance Domain detection | 🔨 In progress |
-| Mutation Ledger + chaos tests | 🔨 In progress |
-| Game Integrity policy engine | 🔨 In progress |
-| Ambient lever set | ⬜ Planned |
-| Measurement harness (PresentMon) | ⬜ Planned |
+| **Performance Domain detection** | ✅ Verified on a 7950X3D — finds the 96 MB / 32 MB split |
+| **Game Integrity policy engine** | ✅ Proven to keep Battlefield 6 ambient-only |
+| **Mutation Ledger + journal** | ✅ 500 chaos trials green |
+| **Safety ladder + restore points** | ✅ Done |
+| **Environment Hazard Scan** | ✅ `godmode scan` runs on real hardware |
+| Emulator + Android catalogs | ✅ NES → PS4, Google Play Games |
+| Ambient lever set (EcoQoS, services, IRQ) | 🔨 Next |
+| Measurement harness (PresentMon) | 🔨 Next |
 | Stutter Forensics | ⬜ Planned |
+| Overlay | ⬜ Planned |
 | Autotune | ⬜ Planned |
 | Console shell / Playnite | ⬜ Planned |
+
+Try it — nothing is modified:
+
+```powershell
+dotnet run --project src/GodMode.Cli -- topology
+dotnet run --project src/GodMode.Cli -- scan
+```
 
 ## Documentation
 
