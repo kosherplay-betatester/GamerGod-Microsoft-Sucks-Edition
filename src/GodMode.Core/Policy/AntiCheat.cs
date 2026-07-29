@@ -193,11 +193,68 @@ public static class AntiCheatDetector
         },
         new AntiCheatSignature
         {
+            Vendor = "Ricochet",
+            Tier = AntiCheatTier.Kernel,
+            Drivers = ["ricochet.sys"],
+            Services = ["ricochet"],
+            FileMarkers = ["ricochet"],
+        },
+        new AntiCheatSignature
+        {
+            Vendor = "mhyprot (miHoYo)",
+            Tier = AntiCheatTier.Kernel,
+            Drivers = ["mhyprot2.sys", "mhyprot3.sys"],
+            Services = ["mhyprot2", "mhyprot3"],
+        },
+        new AntiCheatSignature
+        {
+            Vendor = "Tencent ACE",
+            Tier = AntiCheatTier.Kernel,
+            Drivers = ["ace-base.sys", "acegmer.sys"],
+            Services = ["aceammo", "acegame"],
+            FileMarkers = ["anticheatexpert"],
+        },
+        new AntiCheatSignature
+        {
+            Vendor = "Hyperion (Roblox)",
+            Tier = AntiCheatTier.Kernel,
+            FileMarkers = ["robloxplayerbeta.exe"],
+        },
+        new AntiCheatSignature
+        {
+            Vendor = "Denuvo Anti-Cheat",
+            Tier = AntiCheatTier.Kernel,
+            Drivers = ["denuvo.sys"],
+            Services = ["denuvo"],
+            FileMarkers = ["anticheat_launcher.exe"],
+        },
+        new AntiCheatSignature
+        {
             Vendor = "Valve Anti-Cheat",
             Tier = AntiCheatTier.UserMode,
             FileMarkers = ["steam_api64.dll", "steam_api.dll"],
         },
     ];
+
+    /// <summary>
+    /// Naming fragments that suggest an anti-cheat nobody has catalogued yet.
+    ///
+    /// <para>
+    /// The named signature list can only ever describe products that existed when it was
+    /// written, and new anti-cheats ship constantly. This heuristic catches the rest by
+    /// name, and it is deliberately generous: a false positive costs a few contact levers
+    /// on one title, while a false negative is the failure this project cannot afford.
+    /// </para>
+    ///
+    /// <para>
+    /// Matched only against kernel drivers and service names — never against arbitrary
+    /// files in a game folder, where these fragments appear far too often to be meaningful.
+    /// </para>
+    /// </summary>
+    private static readonly ImmutableArray<string> HeuristicFragments =
+        ["anticheat", "anti-cheat", "anti_cheat", "cheatprot", "gameguard",
+         "gameprotect", "antihack", "anti-hack", "hackshield", "battleye",
+         "easyanti", "vanguard", "faceit", "esportal", "cheatblocker"];
 
     public static AntiCheatAssessment Assess(AntiCheatEnvironment environment) =>
         Assess(environment, BuiltInSignatures);
@@ -229,6 +286,18 @@ public static class AntiCheatDetector
             }
         }
 
+        // Nothing named matched. Before concluding anything, look for an anti-cheat this
+        // catalogue has never heard of — new products ship constantly, and a list written
+        // today cannot describe one released tomorrow.
+        if (findings.Count == 0)
+        {
+            var heuristic = FindByNamingHeuristic(environment);
+            if (heuristic is not null)
+            {
+                findings.Add(heuristic);
+            }
+        }
+
         var ordered = findings
             .OrderByDescending(f => f.Tier)
             .ThenBy(f => f.Vendor, StringComparer.Ordinal)
@@ -239,6 +308,47 @@ public static class AntiCheatDetector
         var tier = ordered.IsEmpty ? AntiCheatTier.Unknown : ordered[0].Tier;
 
         return new AntiCheatAssessment { Tier = tier, Findings = ordered };
+    }
+
+    /// <summary>
+    /// Looks for an uncatalogued anti-cheat by name among kernel drivers and services.
+    /// Reported as <see cref="AntiCheatTier.Kernel"/>, because something calling itself an
+    /// anti-cheat and living in that layer should be treated as one until proven otherwise.
+    /// </summary>
+    private static AntiCheatFinding? FindByNamingHeuristic(AntiCheatEnvironment environment)
+    {
+        foreach (var (values, kind) in new[]
+                 {
+                     (environment.LoadedDrivers, "driver"),
+                     (environment.InstalledServices, "service"),
+                 })
+        {
+            if (values.IsDefaultOrEmpty)
+            {
+                continue;
+            }
+
+            foreach (var value in values)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
+
+                foreach (var fragment in HeuristicFragments)
+                {
+                    if (value.Contains(fragment, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new AntiCheatFinding(
+                            "Unrecognised anti-cheat",
+                            AntiCheatTier.Kernel,
+                            $"{kind} '{value}' matches the naming pattern '{fragment}'");
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     private static string? FirstMatch(

@@ -136,7 +136,14 @@ public sealed class FileJournal(string path) : IJournal
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+            // A bare filename has no directory component, and CreateDirectory("") throws.
+            // The journal is the one component that must never fail for an incidental
+            // reason, because everything recoverable depends on this write landing.
+            var directory = Path.GetDirectoryName(_path);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
 
             var line = JsonSerializer.Serialize(entry, JournalJsonContext.Default.JournalEntry) + "\n";
 

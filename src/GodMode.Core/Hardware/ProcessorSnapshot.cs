@@ -109,7 +109,11 @@ public sealed record ProcessorSnapshot
     /// <summary>Processor brand string, for reporting and profile matching.</summary>
     public string ProcessorName { get; init; } = "Unknown Processor";
 
-    public int LogicalProcessorCount => Cores.Sum(c => c.Processors.Count);
+    // Both guard against a default-valued ImmutableArray. These are required properties, but
+    // "required" only forces an assignment - it does not stop that assignment being
+    // default, and a NullReferenceException from a count is a poor way to learn that.
+    public int LogicalProcessorCount =>
+        Cores.IsDefaultOrEmpty ? 0 : Cores.Sum(c => c.Processors.Count);
 
-    public int PhysicalCoreCount => Cores.Length;
+    public int PhysicalCoreCount => Cores.IsDefaultOrEmpty ? 0 : Cores.Length;
 }

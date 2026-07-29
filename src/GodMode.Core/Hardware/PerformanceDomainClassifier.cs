@@ -81,9 +81,15 @@ public static class PerformanceDomainClassifier
             return [];
         }
 
-        var deepest = candidates.Max(c => c.Level);
+        // L3 is the boundary that matters, and it is preferred over anything deeper.
+        // A victim L4 or eDRAM spans the whole package, so selecting "the deepest cache"
+        // would collapse a genuinely split L3 - the 96 MB and 32 MB dies of an X3D part,
+        // say - into one domain and silently disable partitioning on exactly the hardware
+        // it helps most.
+        var level = candidates.Any(c => c.Level == 3) ? (byte)3 : candidates.Max(c => c.Level);
+
         return candidates
-            .Where(c => c.Level == deepest)
+            .Where(c => c.Level == level)
             .OrderBy(c => c.Processors.Group)
             .ThenBy(c => c.Processors.Mask)
             .ToImmutableArray();
@@ -93,10 +99,15 @@ public static class PerformanceDomainClassifier
         ProcessorSnapshot snapshot,
         ImmutableArray<CacheInfo> lastLevelCaches)
     {
-        // Key: (index of the shared last-level cache instance, efficiency class).
-        // -1 means the core sits outside every last-level cache, as Intel's SoC-tile LP-E
-        // cores do.
-        var buckets = new Dictionary<(int Cache, byte Efficiency), List<PhysicalCore>>();
+        // Key: (processor group, index of the shared last-level cache instance, efficiency
+        // class). -1 for the cache means the core sits outside every last-level cache, as
+        // Intel's SoC-tile LP-E cores do.
+        //
+        // The group is part of the key because a mask is only meaningful within its own
+        // group: logical processor 3 of group 0 and logical processor 3 of group 1 are
+        // different processors that set the same bit. Merging them would produce a mask
+        // that silently addresses the wrong cores on any machine with more than 64 threads.
+        var buckets = new Dictionary<(ushort Group, int Cache, byte Efficiency), List<PhysicalCore>>();
 
         foreach (var core in snapshot.Cores)
         {
@@ -110,7 +121,7 @@ public static class PerformanceDomainClassifier
                 }
             }
 
-            var key = (cacheIndex, core.EfficiencyClass);
+            var key = (core.Processors.Group, cacheIndex, core.EfficiencyClass);
             if (!buckets.TryGetValue(key, out var members))
             {
                 members = [];
@@ -129,7 +140,8 @@ public static class PerformanceDomainClassifier
                     .SelectMany(c => c.Processors.LogicalProcessors)
                     .Min(),
             })
-            .OrderBy(b => b.LowestLogicalProcessor)
+            .OrderBy(b => b.Key.Group)
+            .ThenBy(b => b.LowestLogicalProcessor)
             .ToArray();
 
         var domains = ImmutableArray.CreateBuilder<PerformanceDomain>(ordered.Length);

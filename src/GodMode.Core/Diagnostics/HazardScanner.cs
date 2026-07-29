@@ -121,22 +121,34 @@ public static class HazardScanner
 
     private static void ScanFailedDevices(MachineSnapshot s, ImmutableArray<Hazard>.Builder h)
     {
-        foreach (var device in s.Devices.Where(d =>
-                     !string.Equals(d.Status, "OK", StringComparison.OrdinalIgnoreCase)
-                     && !IsIntentionallyOff(d)))
+        // Device names are not unique — a machine typically has several devices called
+        // "USB Input Device". Reporting each separately would produce colliding ids, so a
+        // user suppressing one finding would silently suppress the others too. Group them
+        // instead, which also reads better.
+        var failures = s.Devices
+            .Where(d => !string.Equals(d.Status, "OK", StringComparison.OrdinalIgnoreCase)
+                        && !IsIntentionallyOff(d))
+            .GroupBy(d => (d.Name, d.Class, d.Status));
+
+        foreach (var group in failures)
         {
+            var (name, deviceClass, status) = group.Key;
+            var count = group.Count();
+
             // A display or audio device that failed to start is a first-order stutter
             // source, well ahead of anything GodMode could tune.
-            var severe = device.Class.Contains("Display", StringComparison.OrdinalIgnoreCase)
-                         || device.Class.Contains("Media", StringComparison.OrdinalIgnoreCase)
-                         || device.Class.Contains("Video", StringComparison.OrdinalIgnoreCase);
+            var severe = deviceClass.Contains("Display", StringComparison.OrdinalIgnoreCase)
+                         || deviceClass.Contains("Media", StringComparison.OrdinalIgnoreCase)
+                         || deviceClass.Contains("Video", StringComparison.OrdinalIgnoreCase);
+
+            var subject = count > 1 ? $"{count} × {name} are not working" : $"{name} is not working";
 
             h.Add(new Hazard(
-                $"device.error.{Slug(device.Name)}",
+                $"device.error.{Slug(deviceClass)}.{Slug(name)}.{StableHash(name, deviceClass, status)}",
                 severe ? HazardSeverity.High : HazardSeverity.Medium,
                 severe ? HazardCategory.Display : HazardCategory.Driver,
-                $"{device.Name} is not working",
-                $"Windows reports this {device.Class} device in a '{device.Status}' state. A "
+                subject,
+                $"Windows reports this {deviceClass} device in a '{status}' state. A "
                 + "display or audio device that fails to initialise can stall the desktop "
                 + "compositor and cause hitches no amount of tuning will fix.",
                 "Reinstall or remove the device in Device Manager. If you no longer use the "
@@ -369,6 +381,38 @@ public static class HazardScanner
         var name = slash >= 0 ? trimmed[(slash + 1)..] : trimmed;
 
         return name.Length == 0 ? null : name;
+    }
+
+    /// <summary>
+    /// A short, deterministic discriminator so two devices that slug identically still get
+    /// distinct finding ids.
+    ///
+    /// <para>
+    /// FNV-1a rather than <see cref="string.GetHashCode()"/>, which .NET randomises per
+    /// process. A per-run identifier would silently break suppressions: a user hides a
+    /// finding, restarts, and it comes back under a new id.
+    /// </para>
+    /// </summary>
+    private static string StableHash(params string[] parts)
+    {
+        const uint Offset = 2166136261;
+        const uint Prime = 16777619;
+
+        var hash = Offset;
+
+        foreach (var part in parts)
+        {
+            foreach (var c in part)
+            {
+                hash ^= c;
+                hash *= Prime;
+            }
+
+            hash ^= 0x1F; // separator, so ("ab","c") and ("a","bc") hash differently
+            hash *= Prime;
+        }
+
+        return hash.ToString("x8");
     }
 
     private static string Slug(string value)

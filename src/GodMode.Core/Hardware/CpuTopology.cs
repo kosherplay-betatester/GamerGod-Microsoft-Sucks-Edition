@@ -63,34 +63,62 @@ public sealed record CpuTopology
     public int PhysicalCoreCount => Domains.Sum(d => d.PhysicalCoreCount);
 
     /// <summary>
-    /// True when there is somewhere to evict background work to. When false, GodMode
-    /// applies every ambient lever except domain confinement, and says so in the UI
-    /// rather than pretending to partition a machine that cannot be partitioned.
+    /// The fewest logical processors the rest of Windows may be confined to.
+    ///
+    /// <para>
+    /// One is not survivable in practice. A single processor has to carry the shell, the
+    /// audio engine, every driver's deferred work and GodMode's own watchdog, so one
+    /// spinning background thread stalls the entire machine — including the code that would
+    /// undo the partition and the panic key that would trigger it.
+    /// </para>
     /// </summary>
-    public bool CanPartition => AmbientDomains.Length > 0;
+    public const int MinimumAmbientProcessors = 2;
 
-    /// <summary>Combined mask of every ambient domain — the background job object's affinity.</summary>
+    /// <summary>
+    /// True when there is somewhere to evict background work to that is large enough to
+    /// keep Windows responsive.
+    ///
+    /// <para>
+    /// A second domain is not sufficient on its own. A processor whose ambient side holds a
+    /// single logical processor would leave Windows unschedulable, so such a machine is
+    /// reported as unpartitionable rather than partitioned unsafely. GodMode then applies
+    /// every ambient lever except domain confinement and says so, instead of pretending to
+    /// partition a machine it cannot partition safely.
+    /// </para>
+    /// </summary>
+    public bool CanPartition =>
+        AmbientDomains.Length > 0 && AmbientMask.Count >= MinimumAmbientProcessors;
+
+    /// <summary>
+    /// Combined mask of the ambient domains — the background job object's affinity.
+    ///
+    /// <para>
+    /// Restricted to the game domain's processor group. A single affinity mask cannot span
+    /// groups, so on a machine large enough to have more than one, only the ambient domains
+    /// sharing the game's group are addressable. Combining them regardless would produce a
+    /// mask whose bits mean different processors depending on which group the operating
+    /// system applied it to.
+    /// </para>
+    ///
+    /// <para>
+    /// When no ambient domain shares the game's group the result is empty, and
+    /// <see cref="CanPartition"/> is then false — GodMode declines to partition rather than
+    /// confining background work to a mask that does not mean what it says.
+    /// </para>
+    /// </summary>
     public ProcessorMask AmbientMask
     {
         get
         {
-            if (AmbientDomains.Length == 0)
-            {
-                return default;
-            }
-
-            var group = AmbientDomains[0].Processors.Group;
+            var group = GameDomain.Processors.Group;
             var mask = 0UL;
+
             foreach (var domain in AmbientDomains)
             {
-                // Cross-group ambient sets are not representable in a single mask; GodMode
-                // targets consumer hardware, which is always a single processor group.
-                if (domain.Processors.Group != group)
+                if (domain.Processors.Group == group)
                 {
-                    continue;
+                    mask |= domain.Processors.Mask;
                 }
-
-                mask |= domain.Processors.Mask;
             }
 
             return new ProcessorMask(group, mask);
