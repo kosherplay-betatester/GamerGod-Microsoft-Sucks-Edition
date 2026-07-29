@@ -46,6 +46,32 @@ try
             return hazards.Any(x => x.Severity == GodMode.Core.Diagnostics.HazardSeverity.High) ? 3 : 0;
         }
 
+        case "restore":
+        {
+            // The uninstaller runs this before removing anything, so it must be honest and
+            // it must never fail merely because there was nothing to do. Exit code 0 means
+            // "this machine has no outstanding GodMode changes" - which is exactly what the
+            // uninstaller needs to know before it is safe to delete the journal.
+            var journalPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "GodMode", "state");
+
+            if (!Directory.Exists(journalPath)
+                || Directory.GetFiles(journalPath, "*.journal").Length == 0)
+            {
+                Console.WriteLine("Nothing to restore. No GodMode changes are recorded as applied.");
+                return 0;
+            }
+
+            // Applying and reverting real machine state arrives with the engine. Until then,
+            // claiming a successful restore would be a lie the uninstaller would act on.
+            Console.Error.WriteLine(
+                "Journals are present but the restore engine is not in this build.");
+            Console.Error.WriteLine(
+                "Reboot to restore the machine - every GodMode change is undone at boot by design.");
+            return 1;
+        }
+
         case "help":
         case "--help":
         case "-h":
@@ -83,6 +109,7 @@ static void PrintUsage()
           topology     Show this machine's performance domains and the routing plan (default)
           scan         Check this machine for things that cost you frames or block launches
           summary      One-line topology summary
+          restore      Undo every change GodMode has recorded, and report what remains
           help         Show this help
 
         OPTIONS

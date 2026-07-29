@@ -53,3 +53,5 @@ third_party/igcl/
 Thumbs.db
 desktop.ini
 .DS_Store
+artifacts/
+install/payload/
