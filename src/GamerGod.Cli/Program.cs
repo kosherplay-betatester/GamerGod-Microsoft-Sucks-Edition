@@ -46,6 +46,15 @@ try
             return hazards.Any(x => x.Severity == GamerGod.Core.Diagnostics.HazardSeverity.High) ? 3 : 0;
         }
 
+        case "on":
+            return await SessionCommands.OnAsync(dryRun: args.Contains("--dry-run", StringComparer.OrdinalIgnoreCase));
+
+        case "off":
+            return await SessionCommands.OffAsync();
+
+        case "status":
+            return await SessionCommands.StatusAsync();
+
         case "restore":
         {
             // The uninstaller runs this before removing anything, so it must be honest and
@@ -106,17 +115,25 @@ static void PrintUsage()
           gamergod [command] [options]
 
         COMMANDS
-          topology     Show this machine's performance domains and the routing plan (default)
+          on           Move everything else out of your games' way
+          off          Put it all back, and print a receipt
+          status       Show whether Game Mode is on, and what it changed
+
           scan         Check this machine for things that cost you frames or block launches
+          topology     Show this machine's performance domains and the routing plan
           summary      One-line topology summary
           restore      Undo every change GamerGod has recorded, and report what remains
           help         Show this help
 
         OPTIONS
-          --json       Emit machine-readable JSON instead of a diagram
+          --dry-run    With 'on': show exactly what would change, and change nothing
+          --json       With 'topology': emit machine-readable JSON
 
-        Every command available today is read-only. GamerGod changes nothing until the
-        engine ships, and when it does, every change is journaled before it is applied.
+        'scan', 'topology' and 'status' only read - they change nothing.
+
+        Every change 'on' makes is written down before it is applied and undone by 'off'.
+        If anything goes wrong, rebooting undoes all of it: that is guaranteed by design
+        and does not depend on GamerGod still working.
 
         """);
 }

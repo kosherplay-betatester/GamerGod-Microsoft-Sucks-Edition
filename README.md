@@ -106,33 +106,43 @@ Some honest examples from our own ledger:
 
 ## Status
 
-🚧 **Early development.** The engine works and is verified on real hardware. It does not
-change anything yet — every command that exists today only reads.
+🟢 **It works.** `gamergod on` moves your background processes off your game's cores, and
+`gamergod off` puts every one of them back.
 
-**306 tests**, including 500 randomised crash-recovery trials.
+**367 tests**, including 500 randomised crash-recovery trials, 3,000-trial topology fuzzing
+and 5,000-trial anti-cheat policy fuzzing.
+
+Verified on the reference machine: a Chrome process went from affinity `0xFFFFFFFF` to
+`0xFFFF0000` (confined to the 32 MB domain) and back again, while MSI Afterburner and RTSS
+stayed untouched at `0xFFFFFFFF` — the thermal denylist holding on real hardware.
 
 | Component | State |
 |---|---|
 | Charter, spec, architecture | ✅ Done |
-| **Performance Domain detection** | ✅ Verified on a 7950X3D — finds the 96 MB / 32 MB split |
-| **Game Integrity policy engine** | ✅ Proven to keep Battlefield 6 ambient-only |
+| **Performance Domain detection** | ✅ Finds the 96 MB / 32 MB split on a 7950X3D |
+| **Game Integrity policy** | ✅ Kernel anti-cheat titles are ambient-only, provably |
 | **Mutation Ledger + journal** | ✅ 500 chaos trials green |
-| **Safety ladder + restore points** | ✅ Done |
-| **Environment Hazard Scan** | ✅ `gamergod scan` runs on real hardware |
+| **Safety policies** | ✅ Thermal, system-critical, lockout and anti-cheat denylists |
+| **Environment Hazard Scan** | ✅ `gamergod scan` |
+| **Ambient engine** | ✅ `gamergod on` / `off` / `status` |
 | Emulator + Android catalogs | ✅ NES → PS4, Google Play Games |
-| Ambient lever set (EcoQoS, services, IRQ) | 🔨 Next |
-| Measurement harness (PresentMon) | 🔨 Next |
+| Measurement harness (PresentMon) | 🔨 Next — until it lands, nothing claims a gain |
 | Stutter Forensics | ⬜ Planned |
 | Overlay | ⬜ Planned |
+| Background service + watchdog | ⬜ Planned |
 | Autotune | ⬜ Planned |
 | Console shell / Playnite | ⬜ Planned |
 
-Try it — nothing is modified:
-
 ```powershell
-dotnet run --project src/GamerGod.Cli -- topology
-dotnet run --project src/GamerGod.Cli -- scan
+gamergod scan          # what's costing you frames. Changes nothing.
+gamergod topology      # which cores your games get. Changes nothing.
+gamergod on --dry-run  # exactly what would change. Changes nothing.
+gamergod on            # move everything else out of the way
+gamergod off           # put it all back, with a receipt
 ```
+
+**What it does not do yet:** measure. Until the harness lands, GamerGod will tell you what it
+changed and never what you gained — see [the Charter](CHARTER.md#vii-we-will-never-claim-a-benefit-we-have-not-measured).
 
 ## Documentation
 

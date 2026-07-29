@@ -30,6 +30,37 @@ it's self-contained.
 
 ---
 
+## Turning it on
+
+```
+gamergod on
+```
+
+That's it. It moves your background programs off the cores your games use, and sets them to
+Windows' efficiency mode so they stop competing for clock speed. Your game keeps the fast
+cores to itself.
+
+When you're finished:
+
+```
+gamergod off
+```
+
+You get a receipt showing exactly what was put back. **If anything ever goes wrong, just
+reboot** — every change is undone at startup by design, and that doesn't depend on GamerGod
+working.
+
+Nervous? See exactly what would happen without changing anything:
+
+```
+gamergod on --dry-run
+```
+
+**One honest note.** GamerGod will tell you what it changed. It will *not* tell you how many
+frames you gained, because it can't measure that yet. When the measurement harness lands
+you'll get a real number with error bars — and if that number turns out to be zero, it'll say
+so.
+
 ## Two commands worth running first
 
 Open a terminal — press `Win`, type `terminal`, press Enter.
