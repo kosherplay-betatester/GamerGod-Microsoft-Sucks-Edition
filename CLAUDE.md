@@ -1,7 +1,7 @@
-# CLAUDE.md — GodMode
+# CLAUDE.md — GamerGod
 
 Read [`CHARTER.md`](CHARTER.md) before writing any code. It is binding and Articles I–VI
-cannot be amended. The design spec is `docs/superpowers/specs/2026-07-29-godmode-design.md`.
+cannot be amended. The design spec is `docs/superpowers/specs/2026-07-29-gamergod-design.md`.
 
 ## What this project is
 
@@ -39,17 +39,17 @@ benefit with real frametime data, and restores the machine exactly on exit or cr
 ## Architecture
 
 ```
-GodMode.Core          pure domain — mutations, ledger, policy, domains. NO OS calls.
-GodMode.Abstractions  interfaces the engine talks to (IServiceControl, ITopologyProvider…)
-GodMode.Windows       the ONLY project that P/Invokes. NativeMethods.txt is the audit surface.
-GodMode.Engine        enter/exit orchestration state machine
-GodMode.Service       Windows Service (LocalSystem): privileged broker + watchdog + boot recovery
-GodMode.Sentinel      per-session agent: hotkeys, shell, frontend
-GodMode.Cli           godmode.exe
-GodMode.Bench         PresentMon interop + A/B statistics
+GamerGod.Core          pure domain — mutations, ledger, policy, domains. NO OS calls.
+GamerGod.Abstractions  interfaces the engine talks to (IServiceControl, ITopologyProvider…)
+GamerGod.Windows       the ONLY project that P/Invokes. NativeMethods.txt is the audit surface.
+GamerGod.Engine        enter/exit orchestration state machine
+GamerGod.Service       Windows Service (LocalSystem): privileged broker + watchdog + boot recovery
+GamerGod.Sentinel      per-session agent: hotkeys, shell, frontend
+GamerGod.Cli           gamergod.exe
+GamerGod.Bench         PresentMon interop + A/B statistics
 ```
 
-**`Core` and `Engine` must not reference `GodMode.Windows`.** An architecture test enforces
+**`Core` and `Engine` must not reference `GamerGod.Windows`.** An architecture test enforces
 this. It is what makes the chaos tests possible — they run the whole ledger against a
 `FakeOs` with no admin rights and no real machine state.
 

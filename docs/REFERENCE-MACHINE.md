@@ -1,6 +1,6 @@
 # Reference Machine
 
-GodMode's primary development and validation target. Every measurement in
+GamerGod's primary development and validation target. Every measurement in
 `docs/MEASUREMENTS.md` is taken here unless stated otherwise. Captured 2026-07-29.
 
 ## Specification
@@ -30,9 +30,9 @@ kernel anti-cheats gate on it.
 | Secure Boot | ✅ Enabled | Battlefield 6 (Javelin) and Black Ops 7 will launch |
 | TPM 2.0 | ✅ Present, ready, enabled | Same |
 | VBS | ✅ Running (status 2) | Hypervisor active — small measurable perf cost, **do not disable** |
-| HVCI / Memory Integrity | ⚠️ Not running (`SecurityServicesRunning = 0`) | *Capability* is what Javelin checks, so BF6 is fine. Enabling it would cost a little performance and gain real security — user's call, GodMode only reports |
+| HVCI / Memory Integrity | ⚠️ Not running (`SecurityServicesRunning = 0`) | *Capability* is what Javelin checks, so BF6 is fine. Enabling it would cost a little performance and gain real security — user's call, GamerGod only reports |
 
-## Installed software relevant to GodMode
+## Installed software relevant to GamerGod
 
 | Software | Role |
 |---|---|
@@ -44,17 +44,17 @@ kernel anti-cheats gate on it.
 
 ## Environment hazards detected
 
-This scan is itself a GodMode feature (`EnvironmentHazardScan`). Everything below was
+This scan is itself a GamerGod feature (`EnvironmentHazardScan`). Everything below was
 found automatically and is a real frametime or compatibility risk on this box.
 
 | Hazard | Severity | Why it matters |
 |---|---|---|
 | **`Virtual Desktop Monitor` driver in `Error` state** | 🔴 High | A display adapter failing to initialise can cause DWM stalls and mode-set hitches. Broken display drivers are a top-tier stutter source. Should be repaired or removed. |
 | **4 virtual display adapters** (Virtual Desktop, Parsec, + NVIDIA/AMD virtual outputs) | 🟡 Medium | Each participates in display enumeration and DWM composition. Multiple virtual outputs are a documented cause of VRR/G-Sync misbehaviour and mode-set latency. |
-| **VMware installed + VBS/Hyper-V running** | 🟡 Medium | Two hypervisor stacks coexisting. Kernel anti-cheats are documented to conflict with third-party hypervisors — the most likely cause of a BF6 launch failure on this machine, and *not* something GodMode would have caused. Worth knowing before blaming us. |
-| **Wi-Fi only, no wired Ethernet** | 🟡 Medium (multiplayer) | For BF6-class multiplayer, a wired connection is worth more than every software lever in this project combined. GodMode's network QoS helps with local contention; it cannot fix RF jitter. **This is the single highest-value upgrade available on this machine.** |
+| **VMware installed + VBS/Hyper-V running** | 🟡 Medium | Two hypervisor stacks coexisting. Kernel anti-cheats are documented to conflict with third-party hypervisors — the most likely cause of a BF6 launch failure on this machine, and *not* something GamerGod would have caused. Worth knowing before blaming us. |
+| **Wi-Fi only, no wired Ethernet** | 🟡 Medium (multiplayer) | For BF6-class multiplayer, a wired connection is worth more than every software lever in this project combined. GamerGod's network QoS helps with local contention; it cannot fix RF jitter. **This is the single highest-value upgrade available on this machine.** |
 | **8 audio endpoints** incl. Steam Streaming, Virtual Desktop Audio, NVIDIA Virtual Audio | 🟢 Low | Extra endpoints cost little, but each virtual device adds an audio graph node. Worth pruning unused ones. |
-| **Hybrid GPU (AMD iGPU + NVIDIA dGPU)** | 🟢 Low | Games must target the RTX 5070 Ti. GodMode should verify per-app GPU preference rather than assume. |
+| **Hybrid GPU (AMD iGPU + NVIDIA dGPU)** | 🟢 Low | Games must target the RTX 5070 Ti. GamerGod should verify per-app GPU preference rather than assume. |
 | **Bluetooth audio (Shokz OpenFit 2+)** | 🟢 Info | BT audio is latency-sensitive; `bthserv`/`BTAGService` are on the hard service denylist. |
 | **Tailscale tunnel adapter** | 🟢 Info | Virtual NIC. Excluded from interrupt-steering targets. |
 
@@ -63,7 +63,7 @@ found automatically and is a real frametime or compatibility risk on this box.
 - ✅ **Asymmetric dual-CCD** Performance Domain detection (96 MB vs 32 MB) — the flagship path
 - ✅ **Hybrid GPU** vendor abstraction (NVAPI + ADLX on one box)
 - ✅ **Kernel anti-cheat compatibility** (BF6/Javelin installed and playable)
-- ✅ **Secure Boot + TPM + VBS on** — proves GodMode delivers gains without touching security
+- ✅ **Secure Boot + TPM + VBS on** — proves GamerGod delivers gains without touching security
 - ✅ **Wi-Fi + virtual adapters** — a realistically messy environment, not a clean-room bench
 - ❌ Does **not** validate: Intel hybrid P/E-core domains, single-CCD AMD, handhelds, wired NIC
   interrupt steering, Snapdragon. Those need CI hardware or community contributors.

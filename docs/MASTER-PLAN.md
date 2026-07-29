@@ -1,4 +1,4 @@
-# GodMode: Microsoft Sucks Edition — Master Plan
+# GamerGod: Microsoft Sucks Edition — Master Plan
 
 > **For agentic workers:** This is the architecture-level master plan. Task-level TDD plans live in `docs/plans/YYYY-MM-DD-<milestone>.md` and are generated per milestone from Section 11.
 
@@ -33,7 +33,7 @@ The spec is unusually well-formed. Six of the eight core ideas are correct and s
 
 The spec says *"non-gaming background threads are isolated to the secondary CCD **or parked completely**."* Those two options are opposites, and parking is the worse one. Parking is what AMD's stock 3D V-Cache Performance Optimizer path does, and it has a well-known side effect: when CCD1 is parked, every background thread on the system is forced onto CCD0 — where it now contends with the game for the exact 96 MB of L3 you parked CCD1 to protect. The [CPU Set Setter](https://github.com/SimonvBez/CPUSetSetter) project documents this directly: *"Windows usually accomplish this by turning off the other CCD (called parking), but this means background processes will now also be forced onto the same CCD as the game, leading to lower and less consistent framerates."*
 
-GodMode's whole reason to exist on an X3D part is that it can do the thing AMD's driver structurally cannot: **keep both CCDs awake and partition them.** Game → CCD0. Everything else on the machine → CCD1. That is strictly better than parking, and it is the single highest-value feature in this project.
+GamerGod's whole reason to exist on an X3D part is that it can do the thing AMD's driver structurally cannot: **keep both CCDs awake and partition them.** Game → CCD0. Everything else on the machine → CCD1. That is strictly better than parking, and it is the single highest-value feature in this project.
 
 Parking stays in the codebase only as an explicitly-labelled comparison profile for the A/B harness, so you can prove the above on your own 7950X3D rather than take my word for it.
 
@@ -53,19 +53,19 @@ So: **CPU Sets are the primary mechanism, hard affinity is the per-profile fallb
 
 Without it, this project is astrology with a nice UI. Nearly every "gaming tweak" in circulation is unmeasured, and a large fraction of them are net-negative. You are building a tool whose entire value proposition is a frametime delta — so frametime measurement must be a first-class subsystem, not a nice-to-have.
 
-Intel's [PresentMon Service](https://github.com/GameTechDev/PresentMon/blob/main/README-Service.md) ships `PresentMonAPI2.dll` with a documented C API and a loader lib, giving programmatic ETW-based frametime + GPU telemetry capture. GodMode should ship an A/B harness that runs the same workload under profile A and profile B and reports avg / 1% low / 0.1% low / frametime variance **with confidence intervals**, so "does killing explorer.exe help?" is a question with an answer on *your* machine instead of a forum opinion.
+Intel's [PresentMon Service](https://github.com/GameTechDev/PresentMon/blob/main/README-Service.md) ships `PresentMonAPI2.dll` with a documented C API and a loader lib, giving programmatic ETW-based frametime + GPU telemetry capture. GamerGod should ship an A/B harness that runs the same workload under profile A and profile B and reports avg / 1% low / 0.1% low / frametime variance **with confidence intervals**, so "does killing explorer.exe help?" is a question with an answer on *your* machine instead of a forum opinion.
 
 Second benefit, and it's a big one: PresentMon tells you *which PID is presenting frames*. That is the cleanest possible game detector — the process putting pixels on screen **is** the game — and it requires opening zero handles to it.
 
 **Missing 2: A crash-recovery tier that survives the watchdog itself dying.**
 
-The spec's watchdog relaunches `explorer.exe` if the *game* crashes. That covers the second-most-likely failure. The most likely failure is *GodMode itself* crashing (or being killed, or the machine losing power) mid-mutation, with explorer dead and 14 services stopped. The answer is a write-ahead journal on disk plus a boot-time recovery pass in an auto-start service — so "reboot fixes it" is true *by construction*, not by hope.
+The spec's watchdog relaunches `explorer.exe` if the *game* crashes. That covers the second-most-likely failure. The most likely failure is *GamerGod itself* crashing (or being killed, or the machine losing power) mid-mutation, with explorer dead and 14 services stopped. The answer is a write-ahead journal on disk plus a boot-time recovery pass in an auto-start service — so "reboot fixes it" is true *by construction*, not by hope.
 
 **Missing 3: An awareness that Microsoft is shipping your Section 5.**
 
 Windows 11 already has a console-style shell that replaces the Explorer desktop at boot, defers desktop subsystems and background tasks, and is [reported to save on the order of 2 GB of RAM](https://windowsforum.com/threads/windows-11-xbox-full-screen-experience-console-style-gaming-on-pc.392878/). It shipped on handhelds, is [enable-able on any 25H2 PC](https://pureinfotech.com/windows-11-enable-xbox-full-screen-experience-any-pc/), and is [being renamed "Xbox mode" with a broad rollout through 2026](https://www.kitguru.net/gaming/joao-silva/windows-11-full-screen-experience-is-now-becoming-xbox-mode/).
 
-This is good news, not bad. It validates the "kill the shell" thesis with Microsoft's own engineering, and it means GodMode should **compose with Xbox mode rather than reimplement it**: let Microsoft own the shell swap where available, and spend your effort on the four things Xbox mode does *not* do — X3D CCD partitioning, service/process control with a reversibility guarantee, measurement, and per-game profiles. Detect Xbox mode at runtime and switch to "co-op mode" when it's active.
+This is good news, not bad. It validates the "kill the shell" thesis with Microsoft's own engineering, and it means GamerGod should **compose with Xbox mode rather than reimplement it**: let Microsoft own the shell swap where available, and spend your effort on the four things Xbox mode does *not* do — X3D CCD partitioning, service/process control with a reversibility guarantee, measurement, and per-game profiles. Detect Xbox mode at runtime and switch to "co-op mode" when it's active.
 
 ### 0.4 The honest performance ledger
 
@@ -74,7 +74,7 @@ Build the harness (Missing 1) and replace this table with your own numbers. Unti
 | # | Lever | Expected avg FPS | Expected 1% low | Reversible? | Notes |
 |---|---|---|---|---|---|
 | 1 | **X3D CCD partition (game→CCD0, rest→CCD1)** | **+5–25%** | **+10–30%** | ✅ instant | Only on dual-CCD X3D. Cache-sensitive titles (sims, MMOs, strategy) at the top of the range; GPU-bound titles ~0. |
-| 2 | In-game frame cap under refresh + VRR + Reflex/Anti-Lag 2 | ~0 | large latency win | n/a (per-game) | Not an OS lever, but it dwarfs everything below. GodMode should *nag* about it, not implement it. |
+| 2 | In-game frame cap under refresh + VRR + Reflex/Anti-Lag 2 | ~0 | large latency win | n/a (per-game) | Not an OS lever, but it dwarfs everything below. GamerGod should *nag* about it, not implement it. |
 | 3 | Exclusive fullscreen, or [windowed-game optimizations](https://support.microsoft.com/en-us/windows/optimizations-for-windowed-games-in-windows-11-3f006843-2c7e-4ed0-9a5e-f9389e535952) for DX10/11 borderless | 0–3% | 0–5% | ✅ instant | Flip-model instead of blt-model. Free, already in the OS, most users have it off. |
 | 4 | Suspending an active browser / Discord / Electron pile | 0–8% | **0–20%** | ✅ instant | Highly bimodal. Near-zero on a clean machine, large on a machine with 60 Chrome tabs. |
 | 5 | Power scheme → high performance (duplicated scheme) | 0–3% | 0–5% | ✅ instant | Mostly matters on laptops and for parked-core wakeup latency. |
@@ -82,7 +82,7 @@ Build the harness (Missing 1) and replace this table with your own numbers. Unti
 | 7 | Killing `explorer.exe` | **~0%** | 0–2% | ✅ instant | ~100–200 MB and near-zero CPU. Real benefit is UX (console feel) + removing shell file-watcher stutter, **not** FPS. Say so in the UI. |
 | 8 | HAGS on/off | −3% to +3% | −5% to +5% | ⚠️ reboot | Genuinely sign-uncertain per system. Pure A/B territory. |
 | 9 | Global timer resolution 0.5 ms | −2% to +2% | −5% to +5% | ⚠️ reboot | Per-process since Win10 2004. Restoring global behaviour is a reboot-tier registry change. Frequently net-negative. |
-| 10 | Network stack registry "tweaks" (Nagle, autotuning, TcpAckFrequency) | 0% | 0% | ✅ but pointless | Cargo cult. Excluded from GodMode. Section 10. |
+| 10 | Network stack registry "tweaks" (Nagle, autotuning, TcpAckFrequency) | 0% | 0% | ✅ but pointless | Cargo cult. Excluded from GamerGod. Section 10. |
 | 11 | Disabling Spectre/Meltdown mitigations | +2–8% | +2–8% | ⚠️ reboot, security downgrade | Real gains, real risk. Section 10 — documented, not implemented. |
 
 **The design consequence:** rows 1, 3, and 4 justify this entire project. Rows 6–9 are worth *offering* with measurement attached, and worth being honest in the UI about. Ship a tool that tells the truth about its own placebo surface and you have something no "debloat script" on GitHub has.
@@ -116,9 +116,9 @@ You have .NET 9 SDK installed (9.0.106/113/119). Install the .NET 10 SDK — 9 i
 | Option | Verdict |
 |---|---|
 | **C# / .NET 10** | ✅ **Chosen.** Full Win32 surface via CsWin32 with compile-time-checked signatures; first-class Windows Service host (`Microsoft.Extensions.Hosting.WindowsServices`); real testability (interfaces + fakes, which is what makes the reversibility guarantee provable); NativeAOT gives a ~5 MB dependency-free binary with fast startup and no JIT pauses in the watchdog; WPF for the config UI; and Playnite extensions are C#, so your frontend integration is the same language. |
-| PowerShell | ❌ As the engine. 300–800 ms startup per invocation kills the watchdog loop; no structured crash handling; `-EncodedCommand` and process-manipulation cmdlets are heavily weighted by EDR heuristics; and there is no good way to hold a job object handle open for the session lifetime. ✅ **Keep it for one thing:** a `GodMode.Extensions` folder of user-authored `.ps1` hooks invoked at enter/exit, sandboxed and journaled. That gives you scriptability without putting the safety-critical path in a script host. |
+| PowerShell | ❌ As the engine. 300–800 ms startup per invocation kills the watchdog loop; no structured crash handling; `-EncodedCommand` and process-manipulation cmdlets are heavily weighted by EDR heuristics; and there is no good way to hold a job object handle open for the session lifetime. ✅ **Keep it for one thing:** a `GamerGod.Extensions` folder of user-authored `.ps1` hooks invoked at enter/exit, sandboxed and journaled. That gives you scriptability without putting the safety-critical path in a script host. |
 | Python | ❌ Packaging an elevated, code-signed, AOT-free service is painful; `pywin32` coverage of CPU Sets / job objects / ETW is thin; and a bundled interpreter in `%ProgramFiles%` running as LocalSystem is a genuine local-privilege-escalation surface. |
-| C++ / C++20 | ⚠️ Only where forced. Nothing here needs it — every API in this document is reachable from CsWin32. The cost is 5× the code and no test doubles for the OS layer, which is exactly the property that makes the reversibility guarantee unverifiable. **Exception:** if a stub launcher must be ≤100 KB and start in under a millisecond, write `GodMode.LaunchStub` in C++. |
+| C++ / C++20 | ⚠️ Only where forced. Nothing here needs it — every API in this document is reachable from CsWin32. The cost is 5× the code and no test doubles for the OS layer, which is exactly the property that makes the reversibility guarantee unverifiable. **Exception:** if a stub launcher must be ≤100 KB and start in under a millisecond, write `GamerGod.LaunchStub` in C++. |
 | Rust | ⚠️ Excellent for the engine (`windows-rs` is first-rate) but you lose the Playnite/WPF integration and there is no ecosystem win that offsets writing two UIs. Reasonable if you already write Rust daily; otherwise the C# path ships faster with the same safety properties, because the safety here is architectural, not memory-safety-related. |
 | Kernel driver (any language) | ❌ See principle 4. |
 
@@ -130,17 +130,17 @@ You have .NET 9 SDK installed (9.0.106/113/119). Install the .NET 10 SDK — 9 i
 | `Microsoft.Extensions.Hosting.WindowsServices` | Service host, logging, DI. |
 | `Microsoft.Diagnostics.Tracing.TraceEvent` | Real-time ETW consumption (`Microsoft-Windows-Kernel-Process`) for zero-handle process lifecycle tracking. |
 | `System.Management` | WMI fallback for topology/device queries where CsWin32 is awkward. |
-| PresentMon SDK (`PresentMonAPI2Loader.lib` / `.dll`) | Frametime + telemetry capture and game-presenting-PID detection. Native interop via a thin C# wrapper in `GodMode.Bench`. |
-| `Serilog` + `Serilog.Sinks.File` | Structured logs to `%ProgramData%\GodMode\logs`, rolling, with a session correlation id. |
+| PresentMon SDK (`PresentMonAPI2Loader.lib` / `.dll`) | Frametime + telemetry capture and game-presenting-PID detection. Native interop via a thin C# wrapper in `GamerGod.Bench`. |
+| `Serilog` + `Serilog.Sinks.File` | Structured logs to `%ProgramData%\GamerGod\logs`, rolling, with a session correlation id. |
 | `System.Text.Json` (source-gen) | Journal + profile serialization. Source-gen so NativeAOT works. |
 | `Vortice.XInput` *(or direct CsWin32 XInput)* | Controller polling for the panic combo. |
 
 ### 2.4 Signing and distribution — plan for this now
 
-An unsigned, elevated binary literally named `GodMode.exe` that enumerates processes and calls `SetProcessDefaultCpuSetMasks` is a SmartScreen wall, a Defender heuristic magnet, and — the one that will actually hurt — a thing people will screenshot in anti-cheat forums.
+An unsigned, elevated binary literally named `GamerGod.exe` that enumerates processes and calls `SetProcessDefaultCpuSetMasks` is a SmartScreen wall, a Defender heuristic magnet, and — the one that will actually hurt — a thing people will screenshot in anti-cheat forums.
 
 - Buy an **OV or EV code-signing certificate** and sign every binary, including the installer, before the first public build. EV gets you instant SmartScreen reputation; OV requires you to build reputation over time.
-- Name the shipped binaries **neutrally**: `GodMode.Service.exe` → `gmsvc.exe`, and the publisher/product metadata should read as a normal utility. Keep "GodMode: Microsoft Sucks Edition" as the product/UI branding. This is not about hiding anything — it's that the filename appears in anti-cheat telemetry and support tickets, and "GodMode" is a term of art for a cheat category.
+- Name the shipped binaries **neutrally**: `GamerGod.Service.exe` → `gmsvc.exe`, and the publisher/product metadata should read as a normal utility. Keep "GamerGod: Microsoft Sucks Edition" as the product/UI branding. This is not about hiding anything — it's that the filename appears in anti-cheat telemetry and support tickets, and "GamerGod" is a term of art for a cheat category.
 - Publish the source. For a tool that runs as LocalSystem and touches game processes, auditability is the only durable answer to "is this safe."
 
 ---
@@ -152,15 +152,15 @@ An unsigned, elevated binary literally named `GodMode.exe` that enumerates proce
 ```mermaid
 flowchart TB
     subgraph S0["Session 0 — LocalSystem"]
-        SVC["GodMode.Service (gmsvc.exe)<br/>• privileged broker<br/>• mutation ledger owner<br/>• crash watchdog<br/>• boot-time recovery"]
-        JRN[("%ProgramData%\GodMode\<br/>journal + profiles + logs")]
+        SVC["GamerGod.Service (gmsvc.exe)<br/>• privileged broker<br/>• mutation ledger owner<br/>• crash watchdog<br/>• boot-time recovery"]
+        JRN[("%ProgramData%\GamerGod\<br/>journal + profiles + logs")]
         SVC <--> JRN
     end
 
     subgraph SN["Interactive session — user"]
-        SEN["GodMode.Sentinel (gmagent.exe)<br/>• panic hotkey + controller combo<br/>• shell kill/restore<br/>• frontend launch<br/>• heartbeat to Service"]
-        UI["GodMode.Ui (WPF)<br/>config, profiles, bench results"]
-        FE["Playnite Fullscreen<br/>+ GodMode.Playnite extension"]
+        SEN["GamerGod.Sentinel (gmagent.exe)<br/>• panic hotkey + controller combo<br/>• shell kill/restore<br/>• frontend launch<br/>• heartbeat to Service"]
+        UI["GamerGod.Ui (WPF)<br/>config, profiles, bench results"]
+        FE["Playnite Fullscreen<br/>+ GamerGod.Playnite extension"]
         GAME["Game process<br/>(never opened for write)"]
     end
 
@@ -181,10 +181,10 @@ flowchart TB
 
 ### 3.2 IPC contract
 
-Named pipe `\\.\pipe\GodMode.Broker`, ACL'd to `BUILTIN\Users` for connect + read/write, with a per-session token check on connect. Message framing: length-prefixed JSON. Commands are total and idempotent:
+Named pipe `\\.\pipe\GamerGod.Broker`, ACL'd to `BUILTIN\Users` for connect + read/write, with a per-session token check on connect. Message framing: length-prefixed JSON. Commands are total and idempotent:
 
 ```csharp
-// src/GodMode.Core/Ipc/BrokerContract.cs
+// src/GamerGod.Core/Ipc/BrokerContract.cs
 public enum BrokerCommand
 {
     Ping,                 // heartbeat, carries Sentinel PID + session id
@@ -203,42 +203,42 @@ public enum BrokerCommand
 ### 3.3 Project layout
 
 ```
-GodMode_Microsoft_Sucks_Edition/
+GamerGod_Microsoft_Sucks_Edition/
 ├── docs/
 │   ├── MASTER-PLAN.md                    # this file
 │   ├── plans/                            # per-milestone TDD task plans
 │   ├── ANTICHEAT-POLICY.md               # the policy table, versioned separately
 │   └── MEASUREMENTS.md                   # bench results on the 7950X3D reference box
 ├── src/
-│   ├── GodMode.Core/                     # no OS calls. Pure domain.
+│   ├── GamerGod.Core/                     # no OS calls. Pure domain.
 │   │   ├── Mutations/                    # IMutation + concrete mutation types
 │   │   ├── Ledger/                       # journal write-ahead, recovery, ordering
 │   │   ├── Profiles/                     # profile model, per-game overrides
 │   │   ├── Policy/                       # denylists, anti-cheat policy engine
 │   │   └── Ipc/                          # BrokerContract, DTOs
-│   ├── GodMode.Abstractions/             # IServiceController, ICpuTopology, IShell,
+│   ├── GamerGod.Abstractions/             # IServiceController, ICpuTopology, IShell,
 │   │                                     # IRegistry, IPowerSchemes, IProcessHost...
-│   ├── GodMode.Windows/                  # the ONLY project that P/Invokes.
+│   ├── GamerGod.Windows/                  # the ONLY project that P/Invokes.
 │   │   ├── NativeMethods.txt             # CsWin32 allowlist == audit surface
 │   │   └── Impl/                         # real implementations of Abstractions
-│   ├── GodMode.Engine/                   # orchestration: enter/exit state machine
-│   ├── GodMode.Service/                  # Windows Service host (gmsvc.exe)
-│   ├── GodMode.Sentinel/                 # per-session agent (gmagent.exe)
-│   ├── GodMode.Cli/                      # godmode.exe on|off|status|bench|profile
-│   ├── GodMode.Ui/                       # WPF config + results viewer
-│   ├── GodMode.Bench/                    # PresentMon wrapper + A/B statistics
-│   └── GodMode.Playnite/                 # Playnite extension (net8.0-windows target)
+│   ├── GamerGod.Engine/                   # orchestration: enter/exit state machine
+│   ├── GamerGod.Service/                  # Windows Service host (gmsvc.exe)
+│   ├── GamerGod.Sentinel/                 # per-session agent (gmagent.exe)
+│   ├── GamerGod.Cli/                      # gamergod.exe on|off|status|bench|profile
+│   ├── GamerGod.Ui/                       # WPF config + results viewer
+│   ├── GamerGod.Bench/                    # PresentMon wrapper + A/B statistics
+│   └── GamerGod.Playnite/                 # Playnite extension (net8.0-windows target)
 ├── tests/
-│   ├── GodMode.Core.Tests/               # ledger, ordering, policy — 100% of Core
-│   ├── GodMode.Chaos.Tests/              # kill-at-random-point → recover → assert
-│   ├── GodMode.Windows.Tests/            # real OS calls, tagged [Trait("Host","VM")]
-│   └── GodMode.Integration.Tests/        # Hyper-V checkpoint harness
+│   ├── GamerGod.Core.Tests/               # ledger, ordering, policy — 100% of Core
+│   ├── GamerGod.Chaos.Tests/              # kill-at-random-point → recover → assert
+│   ├── GamerGod.Windows.Tests/            # real OS calls, tagged [Trait("Host","VM")]
+│   └── GamerGod.Integration.Tests/        # Hyper-V checkpoint harness
 ├── profiles/                             # shipped profile JSON
 ├── tools/setup-vm.ps1                    # provisions the test VM + checkpoint
-└── GodMode.slnx
+└── GamerGod.slnx
 ```
 
-`GodMode.Core` and `GodMode.Engine` must not reference `GodMode.Windows`. Enforced by an architecture test (`NetArchTest` or a hand-rolled assembly-reference assertion). This is what makes the chaos tests possible.
+`GamerGod.Core` and `GamerGod.Engine` must not reference `GamerGod.Windows`. Enforced by an architecture test (`NetArchTest` or a hand-rolled assembly-reference assertion). This is what makes the chaos tests possible.
 
 ---
 
@@ -249,7 +249,7 @@ This is the heart of the project. Everything else is a client of it.
 ### 4.1 The core type
 
 ```csharp
-// src/GodMode.Core/Mutations/IMutation.cs
+// src/GamerGod.Core/Mutations/IMutation.cs
 public interface IMutation
 {
     /// Stable identity, e.g. "service:SysMain" — used for dedupe and idempotent revert.
@@ -291,7 +291,7 @@ The tier ordering is deliberate: the shell comes down last and goes back up **fi
 ### 4.2 Write-ahead journal
 
 ```
-%ProgramData%\GodMode\
+%ProgramData%\GamerGod\
 ├── state\
 │   ├── active.session            # exists ⇒ a session is in progress (dirty flag)
 │   └── <session-guid>.journal    # newline-delimited JSON, append-only, fsync'd
@@ -322,7 +322,7 @@ Revert reads the journal, groups by `Key` (last capture wins), sorts by `Tier` d
 ### 4.4 The chaos test — the test that makes the guarantee real
 
 ```csharp
-// tests/GodMode.Chaos.Tests/LedgerRecoveryTests.cs — shape, not final code
+// tests/GamerGod.Chaos.Tests/LedgerRecoveryTests.cs — shape, not final code
 [Property(MaxTest = 500)]
 public void Any_crash_point_recovers_to_original_state(MutationPlan plan, int crashAfter)
 {
@@ -418,7 +418,7 @@ CDPSvc  CDPUserSvc_*  OneSyncSvc_*
 **Mechanism.** Prefer a **job object** over per-process suspension:
 
 ```
-CreateJobObject("GodMode.Background")
+CreateJobObject("GamerGod.Background")
   → JOBOBJECT_BASIC_LIMIT_INFORMATION {
         LimitFlags = JOB_OBJECT_LIMIT_AFFINITY,
         Affinity   = <CCD1 mask>
@@ -450,14 +450,14 @@ Everything else with a visible window and >50 MB working set is a suspension can
 
 ### 6.3 Peripheral integrity — reframing "passthrough"
 
-There is no passthrough here; that is VM vocabulary. This is a native session and devices simply keep working — **unless you break them**. The same is true of the runtimes: DirectX, Vulkan, and the audio/network stacks are user-mode libraries and kernel drivers that GodMode never loads, unloads, or configures, so "keep them functional" costs zero code and is guaranteed by the denylists in 6.1 plus principle 5. Flight sticks, wheels, pedals, and force-feedback bases are ordinary DirectInput/HID devices — their FFB is driven by the vendor's own kernel driver and needs nothing from us beyond leaving `PlugPlay` and `hidserv` alone. Wireless dongles (Xbox adapter, 2.4 GHz mouse/keyboard receivers, DualSense over BT) depend on `XboxGipSvc` / `bthserv` / `BTAGService`, all of which are on DENY.
+There is no passthrough here; that is VM vocabulary. This is a native session and devices simply keep working — **unless you break them**. The same is true of the runtimes: DirectX, Vulkan, and the audio/network stacks are user-mode libraries and kernel drivers that GamerGod never loads, unloads, or configures, so "keep them functional" costs zero code and is guaranteed by the denylists in 6.1 plus principle 5. Flight sticks, wheels, pedals, and force-feedback bases are ordinary DirectInput/HID devices — their FFB is driven by the vendor's own kernel driver and needs nothing from us beyond leaving `PlugPlay` and `hidserv` alone. Wireless dongles (Xbox adapter, 2.4 GHz mouse/keyboard receivers, DualSense over BT) depend on `XboxGipSvc` / `bthserv` / `BTAGService`, all of which are on DENY.
 
 So "full peripheral support" is not a feature to implement, it is an invariant to protect, and it decomposes into exactly four rules:
 
 1. **Never stop a PnP/device service.** (`PlugPlay`, `DeviceInstall`, `DeviceAssociationService` — already in DENY.) Stopping `PlugPlay` is how you make hotplug silently die until reboot.
 2. **Never suspend a HID virtualization or fan/thermal process.** (Section 6.2 denylist.)
 3. **Never route a device-servicing thread to a parked or restricted core.** Consequence of Correction 1: because CCD1 stays awake, `usbxhci` interrupt servicing, audio engine threads, and HID polling all have somewhere to run. This is a real reliability argument for not parking, on top of the FPS argument.
-4. **Verify, don't assume.** Ship a `PeripheralGuard` that snapshots the device tree via `SetupDiGetClassDevs` (`GUID_DEVCLASS_HIDCLASS`, `MEDIA`, `USB`, `XnaComposite`, `Bluetooth`) at enter, re-snapshots at exit, and **fails the session loudly** if a device disappeared while GodMode was active. During the session, subscribe to `WM_DEVICECHANGE` / `CM_Register_Notification` in the Sentinel: if a controller or audio endpoint vanishes and GodMode is active, auto-revert the last CPU-routing or suspension mutation and log which one. That converts "peripherals must keep working" from a hope into a monitored, self-healing invariant.
+4. **Verify, don't assume.** Ship a `PeripheralGuard` that snapshots the device tree via `SetupDiGetClassDevs` (`GUID_DEVCLASS_HIDCLASS`, `MEDIA`, `USB`, `XnaComposite`, `Bluetooth`) at enter, re-snapshots at exit, and **fails the session loudly** if a device disappeared while GamerGod was active. During the session, subscribe to `WM_DEVICECHANGE` / `CM_Register_Notification` in the Sentinel: if a controller or audio endpoint vanishes and GamerGod is active, auto-revert the last CPU-routing or suspension mutation and log which one. That converts "peripherals must keep working" from a hope into a monitored, self-healing invariant.
 
 VR specifically: SteamVR/OpenXR runtimes (`vrserver.exe`, `vrcompositor.exe`, `OVRServer_x64.exe`, `WindowsMixedRealityRuntime`) go on the **suspension denylist** and get **CCD0 CPU-set access alongside the game** — the compositor is latency-critical and putting it on the far CCD is exactly the cross-CCD latency spike the spec wants to avoid.
 
@@ -466,7 +466,7 @@ VR specifically: SteamVR/OpenXR runtimes (`vrserver.exe`, `vrcompositor.exe`, `O
 **Topology detection — derive, never hardcode.**
 
 ```csharp
-// src/GodMode.Windows/Impl/CpuTopology.cs — algorithm
+// src/GamerGod.Windows/Impl/CpuTopology.cs — algorithm
 // 1. GetLogicalProcessorInformationEx(RelationCache)
 //    → for each SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX with Cache.Level == 3:
 //         record (GroupMask, Cache.CacheSize)
@@ -494,16 +494,16 @@ Never assume "CCD0 is the cache die." It is on 7950X3D and 9950X3D, but CPPC pre
 **Application mechanism, in strict preference order:**
 
 1. **`SetProcessDefaultCpuSetMasks(hGame, ccd0Masks, n)`** with a handle opened for `PROCESS_SET_LIMITED_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION` only. Lowest privilege that does the job. Try this first, always.
-2. **Launcher inheritance**, if (1) fails because the anti-cheat denies the handle. Affinity *is* inherited by child processes; CPU Sets are not. So set affinity on the launcher **before** the game spawns, and the game inherits it. This is the documented Process Lasso technique and it requires opening zero handles to the protected process. GodMode's Playnite/Steam integration makes this natural: we start the launcher, so we can `CreateProcess(CREATE_SUSPENDED)` → `SetProcessAffinityMask` → `ResumeThread`.
-3. **`GodMode.LaunchStub`**, if the user launches from Steam directly. A tiny signed exe registered as the game's Steam launch option (`gmstub.exe %command%`) that sets its own affinity/CPU sets and then `CreateProcess`es the real command line — inheritance does the rest. No external process is ever opened.
+2. **Launcher inheritance**, if (1) fails because the anti-cheat denies the handle. Affinity *is* inherited by child processes; CPU Sets are not. So set affinity on the launcher **before** the game spawns, and the game inherits it. This is the documented Process Lasso technique and it requires opening zero handles to the protected process. GamerGod's Playnite/Steam integration makes this natural: we start the launcher, so we can `CreateProcess(CREATE_SUSPENDED)` → `SetProcessAffinityMask` → `ResumeThread`.
+3. **`GamerGod.LaunchStub`**, if the user launches from Steam directly. A tiny signed exe registered as the game's Steam launch option (`gmstub.exe %command%`) that sets its own affinity/CPU sets and then `CreateProcess`es the real command line — inheritance does the rest. No external process is ever opened.
 4. **Hard affinity on the running game** — behind an explicit per-profile opt-in with a warning, and blocked entirely for titles the policy engine marks Tier-A (Section 6.6).
 
-**Background side is always applied**, regardless of which of the above worked for the game: the `GodMode.Background` job object confines browsers, launchers, and allowed services to CCD1. Even when we cannot touch the game at all, clearing CCD0 of *everything else* delivers most of the benefit — and that path is 100% anti-cheat-inert because we only touch our own processes.
+**Background side is always applied**, regardless of which of the above worked for the game: the `GamerGod.Background` job object confines browsers, launchers, and allowed services to CCD1. Even when we cannot touch the game at all, clearing CCD0 of *everything else* delivers most of the benefit — and that path is 100% anti-cheat-inert because we only touch our own processes.
 
-**CCD Sanity Check — a differentiating feature.** There is a documented, reproducible failure where the wrong CCD gets parked on some boots ([CPUSetSetter #68](https://github.com/SimonvBez/CPUSetSetter/issues/68) reports roughly 1 boot in 5 on 9950X3D, with the cache cores parked when a game launches). GodMode should detect and fix this:
+**CCD Sanity Check — a differentiating feature.** There is a documented, reproducible failure where the wrong CCD gets parked on some boots ([CPUSetSetter #68](https://github.com/SimonvBez/CPUSetSetter/issues/68) reports roughly 1 boot in 5 on 9950X3D, with the cache cores parked when a game launches). GamerGod should detect and fix this:
 
 - Read per-core parking state from the PDH counter `\Processor Information(0,N)\Parking Status` for every logical processor.
-- If, while a game is running, **any CCD0 core is parked while CCD1 cores are unparked**, that is the bug. Raise a toast, log it, and remediate by activating GodMode's duplicated power scheme with `CPMINCORES = 100` (all cores unparked) and re-applying CPU Sets.
+- If, while a game is running, **any CCD0 core is parked while CCD1 cores are unparked**, that is the bug. Raise a toast, log it, and remediate by activating GamerGod's duplicated power scheme with `CPMINCORES = 100` (all cores unparked) and re-applying CPU Sets.
 - Surface it in the UI as "AMD scheduler misparked your cache CCD — corrected." Nobody else does this, and on a 7950X3D it is worth more than every registry tweak in this document combined.
 
 ### 6.5 Power, timers, and latency
@@ -511,15 +511,15 @@ Never assume "CCD0 is the cache die." It is on 7950X3D and 9950X3D, but CPPC pre
 **Power scheme — never mutate the user's plan.**
 
 ```
-powercfg /duplicatescheme SCHEME_MIN   → new GUID, renamed "GodMode"
+powercfg /duplicatescheme SCHEME_MIN   → new GUID, renamed "GamerGod"
   CPMINCORES = 100   (no core parking)
   CPMAXCORES = 100
   IDLEDISABLE = 0    (do NOT disable idle; it raises temps and reduces boost headroom)
   PERFBOOSTMODE = 2  (aggressive)
   Processor performance increase threshold → low
-powercfg /setactive <GodMode GUID>      on enter
+powercfg /setactive <GamerGod GUID>      on enter
 powercfg /setactive <captured original> on exit
-powercfg /delete    <GodMode GUID>      on uninstall
+powercfg /delete    <GamerGod GUID>      on uninstall
 ```
 
 Capture the original active scheme GUID first, and note the honest ceiling: on a desktop 7950X3D already on Balanced with a modern `AmdPPM`, this is worth ~0–3%. Its real job is guaranteeing cores aren't parked when your CPU-set routing needs them.
@@ -535,7 +535,7 @@ Capture the original active scheme GUID first, and note the honest ceiling: on a
 
 **Windowed-game optimizations should be a first-class prompt, not a hidden tweak.** It's a supported Windows 11 setting that moves DX10/11 borderless titles from blt-model to flip-model presentation, and most users have never turned it on. Detect its state; if off, tell the user it's probably the largest free win available and link the setting.
 
-**What GodMode will not do:** `bcdedit` of any kind. Boot-store edits are reboot-scoped, interact badly with BitLocker recovery prompts and Secure Boot expectations, and violate the instant-toggle premise. See Section 10.
+**What GamerGod will not do:** `bcdedit` of any kind. Boot-store edits are reboot-scoped, interact badly with BitLocker recovery prompts and Secure Boot expectations, and violate the instant-toggle premise. See Section 10.
 
 ### 6.6 Anti-cheat policy engine
 
@@ -574,7 +574,7 @@ Make this data, versioned, and testable — not scattered `if` statements.
 }
 ```
 
-Detection runs **before** any mutation targets a game: enumerate loaded kernel drivers (`EnumDeviceDrivers` — no game handle needed), running services, and sibling processes. Vanguard is Tier A because it loads `vgk.sys` at boot and is the most aggressive about handle access; if Vanguard is loaded, GodMode restricts itself to shaping the *environment* and never so much as opens the game.
+Detection runs **before** any mutation targets a game: enumerate loaded kernel drivers (`EnumDeviceDrivers` — no game handle needed), running services, and sibling processes. Vanguard is Tier A because it loads `vgk.sys` at boot and is the most aggressive about handle access; if Vanguard is loaded, GamerGod restricts itself to shaping the *environment* and never so much as opens the game.
 
 Three rules that are absolute, encoded as tests:
 
@@ -582,16 +582,16 @@ Three rules that are absolute, encoded as tests:
 - **No IFEO / `Layers` registry writes for any executable in a Tier A or B game directory.** Anti-cheats read these, and an unexpected IFEO entry on a game exe is a legitimate red flag.
 - **All handles use least privilege.** `PROCESS_QUERY_LIMITED_INFORMATION` for reads, `PROCESS_SET_LIMITED_INFORMATION` for CPU Sets. `PROCESS_ALL_ACCESS` never appears in the codebase — enforced by the banned-API analyzer.
 
-Ship `docs/ANTICHEAT-POLICY.md` explaining exactly what GodMode does and does not do to a game process, in language an anti-cheat vendor's support engineer could read in 60 seconds. If this project ever gets community traction, that document is what prevents a bad week.
+Ship `docs/ANTICHEAT-POLICY.md` explaining exactly what GamerGod does and does not do to a game process, in language an anti-cheat vendor's support engineer could read in 60 seconds. If this project ever gets community traction, that document is what prevents a bad week.
 
 ### 6.7 Frontend and controller shell
 
-**Use Playnite Fullscreen.** It's open source, genuinely good with a controller, aggregates Steam/Epic/GOG/Xbox/emulators, and — decisively — has a **C# extension API**, so `GodMode.Playnite` is a natural integration rather than a hack. Steam Big Picture is the fallback for Steam-only users, and Xbox mode is T3.
+**Use Playnite Fullscreen.** It's open source, genuinely good with a controller, aggregates Steam/Epic/GOG/Xbox/emulators, and — decisively — has a **C# extension API**, so `GamerGod.Playnite` is a natural integration rather than a hack. Steam Big Picture is the fallback for Steam-only users, and Xbox mode is T3.
 
-`GodMode.Playnite` responsibilities:
+`GamerGod.Playnite` responsibilities:
 - On game start (`OnGameStarting`), call the Sentinel: apply per-game profile, set CPU routing for the launched PID.
 - On game stop, restore the pre-game (but still in-Game-Mode) state.
-- Expose a "GodMode" menu inside Playnite Fullscreen for profile switching and exit — so the user never needs a desktop.
+- Expose a "GamerGod" menu inside Playnite Fullscreen for profile switching and exit — so the user never needs a desktop.
 - Surface the last bench result for that game as a Playnite field.
 
 **Close explorer, do not suspend it.** The spec offers both ("safely suspend or close"), but suspension is the worse option and should not be built. A suspended `explorer.exe` still owns `Shell_TrayWnd`, `Progman`, and the shell's COM class registrations — so any process that does a synchronous `SendMessage` to the shell window, calls a shell COM object, or opens a common file dialog will block until the suspend is lifted. A hung shell is worse than an absent one: absent, callers fail fast and move on; hung, the game or launcher freezes with no visible cause. Suspension also saves nothing extra, since an idle explorer costs ~0% CPU already and the pages stay committed either way.
@@ -610,12 +610,12 @@ Four independent ways out, because the failure you didn't plan for is the one th
 
 1. **Keyboard panic:** low-level keyboard hook in the Sentinel, `Ctrl+Alt+Shift+F12` held 1 s → `ForceRestoreAll`. The Sentinel runs at normal integrity but the hook still fires; and if the Sentinel is dead, path 3 covers it.
 2. **Controller panic:** XInput poll at 30 Hz in the Sentinel for `View + Menu + LB + RB` held 3 s. Non-negotiable for a controller-first shell — a stranded user may not have a keyboard in reach.
-3. **Service-side heartbeat:** Sentinel pings every 1 s. Gap > 5 s → the Service reverts everything and relaunches explorer via `CreateProcessAsUser`. This is what covers "GodMode crashed."
+3. **Service-side heartbeat:** Sentinel pings every 1 s. Gap > 5 s → the Service reverts everything and relaunches explorer via `CreateProcessAsUser`. This is what covers "GamerGod crashed."
 4. **Reboot:** guaranteed by principle 2 and the boot-recovery pass. This is the floor, and it must never depend on any of the above working.
 
 **Game watchdog:** track the game PID via ETW `Kernel-Process`. On `ProcessStop`, classify:
 - exit code 0 → clean exit → restore per profile (`stayInGameMode` or full exit).
-- non-zero exit / `WerFault.exe` spawned with the game as target → **crash** → full restore, keep the frontend up, show "game crashed, GodMode restored."
+- non-zero exit / `WerFault.exe` spawned with the game as target → **crash** → full restore, keep the frontend up, show "game crashed, GamerGod restored."
 - game gone but frontend also gone → treat as a total failure → full restore + explorer.
 
 Set the Service's own recovery: `sc failure gmsvc reset= 86400 actions= restart/5000/restart/5000/restart/5000`.
@@ -623,7 +623,7 @@ Set the Service's own recovery: `sc failure gmsvc reset= 86400 actions= restart/
 ### 6.9 Measurement harness
 
 ```
-GodMode.Bench
+GamerGod.Bench
 ├── PresentMonSession      # loads PresentMonAPI2Loader.dll, opens a session,
 │                          # streams per-frame data for the presenting PID
 ├── FrameSeries            # msBetweenPresents, msUntilDisplayed, msGpuActive...
@@ -639,7 +639,7 @@ Rules that make the numbers trustworthy:
 - **Report a confidence interval.** A tweak whose CI straddles zero is reported as "no measurable effect" — and the UI says exactly that.
 - **Store results in `docs/MEASUREMENTS.md` and per-profile JSON**, keyed by game + GPU driver version + Windows build, so results invalidate when the environment changes.
 
-This subsystem is what makes GodMode a different kind of project from every "Windows debloat script" on GitHub.
+This subsystem is what makes GamerGod a different kind of project from every "Windows debloat script" on GitHub.
 
 ---
 
@@ -661,10 +661,10 @@ sequenceDiagram
         SVC-->>SEN: Refused(reason) -- nothing mutated
     end
     SVC->>SVC: create session guid, write state\active.session (fsync)
-    SVC->>OS: [Power]   duplicate+activate GodMode scheme      (journal→apply)
+    SVC->>OS: [Power]   duplicate+activate GamerGod scheme      (journal→apply)
     SVC->>OS: [Registry] GameDVR off, per-profile HKCU values  (journal→apply)
     SVC->>OS: [Service] stop ALLOW∖DENY set, dependency order  (journal→apply)
-    SVC->>OS: [Suspend] create GodMode.Background job, assign, affinity=CCD1
+    SVC->>OS: [Suspend] create GamerGod.Background job, assign, affinity=CCD1
     SVC->>OS: [CpuRouting] CCD sanity check + unpark verify
     SVC-->>SEN: EnteredPartial{shellPending}
     SEN->>OS: [Shell] PostMessage Shell_TrayWnd 0x5B4 (verify ≤3s, else fallback)
@@ -680,7 +680,7 @@ The Sentinel owns the shell step because it is session-local. The Service journa
 
 ```mermaid
 sequenceDiagram
-    participant PL as Playnite + GodMode ext
+    participant PL as Playnite + GamerGod ext
     participant SEN as Sentinel
     participant SVC as Service
     participant PM as PresentMon
@@ -730,11 +730,11 @@ Explorer comes back **first** so the user is looking at a desktop while the slow
 
 | Layer | What | Where it runs |
 |---|---|---|
-| `GodMode.Core` unit | Ledger ordering, journal replay, policy evaluation, denylist enforcement, topology math against captured `GetLogicalProcessorInformationEx` blobs | Host, no admin |
+| `GamerGod.Core` unit | Ledger ordering, journal replay, policy evaluation, denylist enforcement, topology math against captured `GetLogicalProcessorInformationEx` blobs | Host, no admin |
 | **Chaos property tests** | 500× (random plan × random crash point) → cold recovery → state equality (Section 4.4) | Host, no admin |
-| Architecture tests | `Core`/`Engine` must not reference `GodMode.Windows`; banned P/Invoke analyzer (`OpenProcess` with `PROCESS_ALL_ACCESS`, `WriteProcessMemory`, `CreateRemoteThread`, `SetWindowsHookEx` cross-process, `bcdedit`) | Host |
+| Architecture tests | `Core`/`Engine` must not reference `GamerGod.Windows`; banned P/Invoke analyzer (`OpenProcess` with `PROCESS_ALL_ACCESS`, `WriteProcessMemory`, `CreateRemoteThread`, `SetWindowsHookEx` cross-process, `bcdedit`) | Host |
 | Policy tests | Every DENY service asserted unreachable from every shipped profile; every anti-cheat tier asserted to forbid `ProcessSuspendOfGame` | Host |
-| `GodMode.Windows` integration | Real SCM, real registry, real CPU sets, real job objects | **Hyper-V VM only**, `[Trait("Host","VM")]` |
+| `GamerGod.Windows` integration | Real SCM, real registry, real CPU sets, real job objects | **Hyper-V VM only**, `[Trait("Host","VM")]` |
 | Full-system recovery | Enter → hard-reset the VM → boot → assert clean state and no leftover mutations | Hyper-V, checkpoint-restored per run |
 | Peripheral integrity | Enter with controller + USB DAC attached → assert both enumerate at exit | Reference box, manual checklist |
 | Performance regression | The bench harness itself, on the reference 7950X3D | Reference box |
@@ -778,7 +778,7 @@ Explicitly out of scope. Each of these appears in popular "optimizer" tools; eac
 | Disabling the paging file | Causes hard crashes in games that reserve large virtual address ranges. |
 | Setting game priority to Realtime | Starves the audio and input threads the tool is supposed to protect. High is the ceiling, and even that should be measured. |
 | MSI-mode / IRQ affinity registry edits | Per-device, reboot-required, and a bad value can leave a device non-functional in a way that is hard to diagnose. |
-| Permanently disabling Windows Update | Security posture. GodMode *pauses* the update stack for the session and restarts it on exit. That's the whole difference between this tool and a debloat script. |
+| Permanently disabling Windows Update | Security posture. GamerGod *pauses* the update stack for the session and restarts it on exit. That's the whole difference between this tool and a debloat script. |
 
 ---
 
@@ -787,8 +787,8 @@ Explicitly out of scope. Each of these appears in popular "optimizer" tools; eac
 Each milestone ends with working, demonstrable software and an explicit exit criterion. Do not start M2 until M1's chaos tests are green.
 
 ### M0 — Skeleton and safety net *(~1 week)*
-Solution scaffold, `GodMode.Abstractions` + `FakeOs`, Serilog, `--dry-run`, `tools/setup-vm.ps1` with a `clean` Hyper-V checkpoint, CI running unit + architecture tests.
-**Exit:** `godmode.exe status` prints real CPU topology for the 7950X3D (CCD0 = 96 MB / LP 0–15, CCD1 = 32 MB / LP 16–31), derived not hardcoded. VM harness restores a checkpoint in one command.
+Solution scaffold, `GamerGod.Abstractions` + `FakeOs`, Serilog, `--dry-run`, `tools/setup-vm.ps1` with a `clean` Hyper-V checkpoint, CI running unit + architecture tests.
+**Exit:** `gamergod.exe status` prints real CPU topology for the 7950X3D (CCD0 = 96 MB / LP 0–15, CCD1 = 32 MB / LP 16–31), derived not hardcoded. VM harness restores a checkpoint in one command.
 
 ### M1 — The ledger *(~2 weeks — the most important milestone)*
 `IMutation`, write-ahead journal with fsync, tiered revert, cold recovery, and the chaos property test. Two real mutation types to prove the shape: `PowerSchemeMutation` and `RegistryValueMutation`.
@@ -799,7 +799,7 @@ Windows Service host, ACL'd named pipe, heartbeat, `CreateProcessAsUser` shell r
 **Exit:** In the VM — kill explorer, kill the Sentinel, and a desktop returns within 10 s with the journal archived. Controller combo triggers full restore with no keyboard attached.
 
 ### M3 — X3D routing *(~2 weeks — the headline feature)*
-Topology detection, all five routing policies, `SetProcessDefaultCpuSetMasks` path, `GodMode.Background` job object, launcher-inheritance fallback, `GodMode.LaunchStub`, CCD parking sanity check via PDH counters.
+Topology detection, all five routing policies, `SetProcessDefaultCpuSetMasks` path, `GamerGod.Background` job object, launcher-inheritance fallback, `GamerGod.LaunchStub`, CCD parking sanity check via PDH counters.
 **Exit:** On the reference 7950X3D, a game process shows CPU-set-confined execution on LP 0–15 while a browser under load is confined to LP 16–31, verified in Task Manager per-core view and by the harness. Wrong-CCD-parking is detected and corrected on a synthetically-parked system.
 
 ### M4 — Measurement *(~2 weeks — do this before M5, not after)*
@@ -811,12 +811,12 @@ Service controller with the three lists, job-object background confinement, ther
 **Exit:** Enter and exit T0 twenty times with an Xbox controller, a DualSense over BT, and a USB DAC attached; device tree diff is empty every time; every stopped service returns to its captured state.
 
 ### M6 — Console UX *(~2 weeks)*
-Shell teardown (graceful `0x5B4` + fallback), Playnite Fullscreen integration, `GodMode.Playnite` extension, WPF config UI, per-game profiles, T2 profile-swap provisioning, T3 Xbox mode detection.
+Shell teardown (graceful `0x5B4` + fallback), Playnite Fullscreen integration, `GamerGod.Playnite` extension, WPF config UI, per-game profiles, T2 profile-swap provisioning, T3 Xbox mode detection.
 **Exit:** Cold boot → sign in → controller-only path into a game and back out, never touching a keyboard or mouse.
 
 ### M7 — Hardening and release *(~2 weeks)*
-Code signing, MSI/MSIX installer with clean uninstall (deletes the GodMode power scheme, unregisters the service, archives journals), `docs/ANTICHEAT-POLICY.md`, LPE review of the pipe surface, telemetry-free crash reporting.
-**Exit:** Clean install → use → uninstall on a fresh VM leaves zero trace outside `%ProgramData%\GodMode\archive` (and that is removable via a documented flag).
+Code signing, MSI/MSIX installer with clean uninstall (deletes the GamerGod power scheme, unregisters the service, archives journals), `docs/ANTICHEAT-POLICY.md`, LPE review of the pipe surface, telemetry-free crash reporting.
+**Exit:** Clean install → use → uninstall on a fresh VM leaves zero trace outside `%ProgramData%\GamerGod\archive` (and that is removable via a documented flag).
 
 **Total: roughly 14–15 focused weeks.** If you want value sooner, M0→M1→M3 alone (about 5 weeks) delivers the X3D routing that is worth more than the rest of the project combined — as a CLI, with no UI and no shell handling.
 
@@ -832,7 +832,7 @@ Every requirement from the original brief, and where it is answered.
 | 1 | Dedicated safe secondary profile | §5 T2 | Built as specified — and it's the strongest reversibility story |
 | 1 | 100% reversible, non-destructive | §1 principles 1–2, §4 ledger, §4.4 chaos test | Promoted from policy to enforced invariant |
 | 1 | Reboot restores standard Windows | §4.3 boot recovery, §1 principle 2 | Guaranteed by construction, VM-tested |
-| 1 | Crash watchdog relaunches explorer | §6.8 paths 1–4, §4.3 | Extended: watchdog also survives GodMode's own death |
+| 1 | Crash watchdog relaunches explorer | §6.8 paths 1–4, §4.3 | Extended: watchdog also survives GamerGod's own death |
 | 2 | Resource prioritization for FPS + 1%/0.1% lows | §0.4 ledger, §6.2, §6.4 | Built, with honest per-lever expectations |
 | 2 | Suspend/stop background services, updates, telemetry | §6.1 three lists | Built — stop only, never change StartType |
 | 2 | Background app activity control | §6.2 job object + suspension | Built, with a thermal-safety denylist |
@@ -843,7 +843,7 @@ Every requirement from the original brief, and where it is answered.
 | 4 | 3D V-Cache core routing | §6.4, §0.2 Correction 1 | **Design corrected:** partition both CCDs, don't park one |
 | 4 | Affinity & thread scheduling | §6.4, §0.2 Correction 2 | **Mechanism corrected:** CPU Sets primary, affinity fallback |
 | 4 | Isolate background threads to secondary CCD | §6.2 job object, §6.4 | Built as specified — this half of the spec was exactly right |
-| 5 | Controller-friendly fullscreen frontend | §6.7, §5 T1/T3, M6 | Playnite Fullscreen + `GodMode.Playnite` extension |
+| 5 | Controller-friendly fullscreen frontend | §6.7, §5 T1/T3, M6 | Playnite Fullscreen + `GamerGod.Playnite` extension |
 | 5 | Suspend/close explorer, auto-relaunch | §6.7 | Built as *close* — §6.7 explains why suspend is unsafe |
 | 6.1 | Tech stack recommendation | §2 | C# / .NET 10 LTS + CsWin32 + NativeAOT |
 | 6.2 | Implementation strategy | §6 (all subsections) | Per-subsystem, with mechanisms and failure modes |

@@ -1,6 +1,6 @@
 export const meta = {
   name: 'feature-factory',
-  description: 'Design, build, review and harden a GodMode feature end to end',
+  description: 'Design, build, review and harden a GamerGod feature end to end',
   whenToUse:
     'Run with args = the feature description, e.g. "EcoQoS demotion of background processes". ' +
     'Chains architect -> builder -> critic -> fixer, and loops until the critic says SHIP or ' +
@@ -75,14 +75,14 @@ const REVIEW_SCHEMA = {
 phase('Design')
 
 const design = await agent(
-  `Design this GodMode feature into a buildable specification.
+  `Design this GamerGod feature into a buildable specification.
 
 REQUEST: ${REQUEST}
 
 Answer all five questions your instructions require. If the request violates Charter
 Articles I to VI, set verdict to "decline" and say which article and why - declining is a
 correct and valuable outcome, not a failure.`,
-  { label: 'architect', phase: 'Design', agentType: 'godmode-feature-architect', schema: SPEC_SCHEMA }
+  { label: 'architect', phase: 'Design', agentType: 'gamergod-feature-architect', schema: SPEC_SCHEMA }
 )
 
 if (!design || design.verdict === 'decline') {
@@ -99,7 +99,7 @@ const build = await agent(
 write the minimum code to pass. Run the full suite before reporting.
 
 ${design.spec}`,
-  { label: 'builder', phase: 'Build', agentType: 'godmode-feature-builder', schema: BUILD_SCHEMA }
+  { label: 'builder', phase: 'Build', agentType: 'gamergod-feature-builder', schema: BUILD_SCHEMA }
 )
 
 if (!build || !build.implemented) {
@@ -128,7 +128,7 @@ ${design.spec}
 ${history.length ? `Previously reported and supposedly fixed:\n${history.join('\n')}` : ''}
 
 Run the test suite yourself. Read test bodies, not just names.`,
-    { label: `critic:r${round}`, phase: round === 1 ? 'Review' : 'Harden', agentType: 'godmode-charter-critic', schema: REVIEW_SCHEMA }
+    { label: `critic:r${round}`, phase: round === 1 ? 'Review' : 'Harden', agentType: 'gamergod-charter-critic', schema: REVIEW_SCHEMA }
   )
 
   if (!review) {
@@ -162,7 +162,7 @@ do not add a flag that bypasses a safety check.
 ${work.map((w, i) => `${i + 1}. ${w}`).join('\n')}
 
 Run the full suite and report honestly, including anything you could not fix.`,
-    { label: `fixer:r${round}`, phase: 'Harden', agentType: 'godmode-feature-builder', schema: BUILD_SCHEMA }
+    { label: `fixer:r${round}`, phase: 'Harden', agentType: 'gamergod-feature-builder', schema: BUILD_SCHEMA }
   )
 
   if (!fix?.testsPassing) {

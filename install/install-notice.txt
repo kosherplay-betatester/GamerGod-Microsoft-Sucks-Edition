@@ -1,15 +1,15 @@
-GodMode changes nothing about how Windows runs until you turn it on.
+GamerGod changes nothing about how Windows runs until you turn it on.
 
 WHAT INSTALLING DOES
 
   - Copies program files
   - Creates a state folder that only administrators can write to
   - Registers a background service whose job is to restore your machine after a crash
-  - Adds godmode.exe to your PATH
+  - Adds gamergod.exe to your PATH
 
 That is the complete list.
 
-WHAT GODMODE WILL NEVER DO
+WHAT GAMERGOD WILL NEVER DO
 
   - Ship or load a kernel driver
   - Inject into, hook, or modify a game
@@ -23,23 +23,23 @@ program, and the first six of them cannot be changed.
 
 ABOUT YOUR GAMES
 
-GodMode classifies every change it can make by one question: can a game detect it?
+GamerGod classifies every change it can make by one question: can a game detect it?
 
 Changes that only affect OTHER processes are invisible to your game and always applied.
 Changes that would touch the game itself are opt-in, and are refused outright for any title
-protected by kernel anti-cheat. For those games GodMode never opens a handle to the game at
+protected by kernel anti-cheat. For those games GamerGod never opens a handle to the game at
 all - not as a matter of care, but because there is no code path that can.
 
 Most of the benefit comes from clearing everything else off your game's cores anyway.
 
 IF SOMETHING GOES WRONG
 
-Reboot. Every change GodMode makes is undone at startup by design, and that guarantee does
-not depend on GodMode still working.
+Reboot. Every change GamerGod makes is undone at startup by design, and that guarantee does
+not depend on GamerGod still working.
 
 REMOVING IT
 
-Use Add or Remove Programs, or run Uninstall-GodMode.ps1. Either way, your machine is
+Use Add or Remove Programs, or run Uninstall-GamerGod.ps1. Either way, your machine is
 restored before anything is deleted, and you get a receipt showing exactly what was undone.
 
 GPLv3. Free forever. No paid tier, no bundled software, no advertising.

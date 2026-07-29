@@ -11,7 +11,7 @@ Every tool in this space dies the same way. It ships a pile of toggles, wins a b
 attention, and then nobody opens it again — because after the first session there is no
 reason to. The tweaks are applied; the app is furniture.
 
-GodMode has exactly one structural advantage over that pattern: **it produces new
+GamerGod has exactly one structural advantage over that pattern: **it produces new
 information every time you play.** Not a setting. An answer. That is the product.
 
 Everything below follows from taking that seriously.
@@ -32,7 +32,7 @@ that?"* It is the only screen with a reason to be looked at twice.
 
 ## Decision 2 — Zero configuration. One switch.
 
-"Pick a profile" is a failure state. If GodMode needs the user to choose a profile before
+"Pick a profile" is a failure state. If GamerGod needs the user to choose a profile before
 it helps, it has offloaded its actual job onto them.
 
 **The default path has one control.** Detect the machine, detect the title, apply ambient,
@@ -40,7 +40,7 @@ revert on exit. Profiles exist for people who go looking for them, and the autot
 eventually removes the need even for those.
 
 A corollary that matters: **the app should not need to be open.** Arm on game launch, act,
-revert, and leave a receipt. The user opens GodMode to review what happened, not to make it
+revert, and leave a receipt. The user opens GamerGod to review what happened, not to make it
 happen.
 
 ## Decision 3 — Ship the Proof Run in v1, not in milestone 4
@@ -49,7 +49,7 @@ Nobody trusts a performance tool, and they are right not to. The category earned
 
 So the first thing a new user does is not "turn it on." It is:
 
-> **Proof Run** — play for 90 seconds normally, then 90 seconds with GodMode. Here is your
+> **Proof Run** — play for 90 seconds normally, then 90 seconds with GamerGod. Here is your
 > delta, on your hardware, with error bars. If it is zero, we will say so.
 
 That flow is the entire brand argument in three minutes, it is the inverse of every snake
@@ -65,7 +65,7 @@ A 7950X3D with 64 GB gains something real but modest. A 16 GB laptop, a handheld
 six-core machine with a browser open gains *far* more, because it is genuinely contended.
 
 We have been designing for the top of the market because that is the hardware in front of
-us. That is backwards. **The person GodMode helps most cannot afford to fix their problem
+us. That is backwards. **The person GamerGod helps most cannot afford to fix their problem
 with money.** That is also the larger audience by an order of magnitude, and the one for
 whom "the people's project" actually means something.
 
@@ -139,7 +139,7 @@ it is one that only an open project can build.
 |---|---|
 | **First-run hazard report** | Our scan found a display driver in an error state, a vulnerable kernel driver, and two coexisting hypervisors on the reference machine inside ten seconds. Telling someone their display driver is broken is worth more than 2% more FPS, and it costs us nothing. Lead with it. |
 | **"Why is this greyed out?"** | Every disabled control explains itself in one sentence. *"Contact routing is unavailable because Battlefield 6 uses kernel anti-cheat."* Users forgive limits they understand. |
-| **A visible do-nothing state** | When GodMode determines it cannot help — single-domain CPU, nothing running, already optimal — it must say so plainly rather than inventing work. A tool that admits it has nothing to offer today is the one people believe tomorrow. |
+| **A visible do-nothing state** | When GamerGod determines it cannot help — single-domain CPU, nothing running, already optimal — it must say so plainly rather than inventing work. A tool that admits it has nothing to offer today is the one people believe tomorrow. |
 | **Uninstall that proves itself** | Run the full revert, then show the receipt, then remove. Leaving cleanly is part of the promise, and it is the last impression. |
 
 ---

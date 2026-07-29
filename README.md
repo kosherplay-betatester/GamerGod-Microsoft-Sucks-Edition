@@ -1,6 +1,6 @@
 <div align="center">
 
-# GodMode
+# GamerGod
 ### *Microsoft Sucks Edition*
 #### The Gamers' Redemption
 
@@ -27,7 +27,7 @@ Meanwhile every "optimization guide" on the internet tells you to disable VBS, t
 Defender, and paste registry keys you cannot undo — and half of those tweaks are measured
 by nobody, while some of them will stop Battlefield 6 from launching at all.
 
-## What GodMode does
+## What GamerGod does
 
 It makes the machine around your game quiet, and it can prove it.
 
@@ -49,7 +49,7 @@ It makes the machine around your game quiet, and it can prove it.
 
 ### The overlay, specifically
 
-RivaTuner and MangoHud inject a DLL into your game. GodMode doesn't have to — it reads
+RivaTuner and MangoHud inject a DLL into your game. GamerGod doesn't have to — it reads
 frame data from PresentMon's ETW stream out-of-process and draws in a separate
 click-through window. Same HUD, zero contact with the game, works even on kernel
 anti-cheat titles.
@@ -59,7 +59,7 @@ game-domain vs background-domain CPU load side by side, and `⚠ hitch 340 ms �
 appearing live. Every other overlay tells you a number went bad. This one tells you what
 did it.
 
-## What GodMode will never do
+## What GamerGod will never do
 
 Read [the Charter](CHARTER.md). It is binding, and Articles I–VI cannot be amended.
 
@@ -71,7 +71,7 @@ a failed build.
 
 ## Never breaks your games — architecturally
 
-Every change GodMode can make is classified by one question: **can the game detect it,
+Every change GamerGod can make is classified by one question: **can the game detect it,
 even in principle?**
 
 | **AMBIENT** | **CONTACT** |
@@ -80,7 +80,7 @@ even in principle?**
 | Invisible to your game by construction | Observable |
 | **Always allowed** | **Opt-in — and hard-blocked for kernel anti-cheat** |
 
-For **Battlefield 6, Valorant, Fortnite, Apex, Rainbow Six** — GodMode runs 100% Ambient.
+For **Battlefield 6, Valorant, Fortnite, Apex, Rainbow Six** — GamerGod runs 100% Ambient.
 It never opens a handle to your game. Not "we're careful." It has no code path that can.
 
 And most of the win is Ambient anyway: clearing every other process off your game's cores
@@ -109,7 +109,7 @@ Some honest examples from our own ledger:
 🚧 **Early development.** The engine works and is verified on real hardware. It does not
 change anything yet — every command that exists today only reads.
 
-**125 tests**, including 500 randomised crash-recovery trials.
+**306 tests**, including 500 randomised crash-recovery trials.
 
 | Component | State |
 |---|---|
@@ -118,7 +118,7 @@ change anything yet — every command that exists today only reads.
 | **Game Integrity policy engine** | ✅ Proven to keep Battlefield 6 ambient-only |
 | **Mutation Ledger + journal** | ✅ 500 chaos trials green |
 | **Safety ladder + restore points** | ✅ Done |
-| **Environment Hazard Scan** | ✅ `godmode scan` runs on real hardware |
+| **Environment Hazard Scan** | ✅ `gamergod scan` runs on real hardware |
 | Emulator + Android catalogs | ✅ NES → PS4, Google Play Games |
 | Ambient lever set (EcoQoS, services, IRQ) | 🔨 Next |
 | Measurement harness (PresentMon) | 🔨 Next |
@@ -130,8 +130,8 @@ change anything yet — every command that exists today only reads.
 Try it — nothing is modified:
 
 ```powershell
-dotnet run --project src/GodMode.Cli -- topology
-dotnet run --project src/GodMode.Cli -- scan
+dotnet run --project src/GamerGod.Cli -- topology
+dotnet run --project src/GamerGod.Cli -- scan
 ```
 
 ## Documentation
@@ -163,12 +163,12 @@ without measurement data attached are marked `unverified` and never applied by d
 ### Why GPLv3 and not MIT
 
 GPLv3 places no restriction on *you*. Use it, modify it, run it, share it, build a business
-around it — all fine. The only thing it prevents is taking GodMode, closing the source, and
+around it — all fine. The only thing it prevents is taking GamerGod, closing the source, and
 redistributing it that way.
 
-For this project specifically that isn't ideology, it's a safety property. GodMode runs as
+For this project specifically that isn't ideology, it's a safety property. GamerGod runs as
 LocalSystem in the same neighbourhood as kernel anti-cheat. If someone ships a closed fork
-that *does* inject, or *does* load a driver, and still calls it GodMode, the damage lands on
+that *does* inject, or *does* load a driver, and still calls it GamerGod, the damage lands on
 users and on this project's standing with anti-cheat vendors — and that is the one thing
 that cannot be undone. Copyleft means every fork stays auditable.
 
@@ -179,5 +179,5 @@ stays wide open.
 
 <div align="center">
 <sub>Windows is a fine operating system that happens to be a poor host for a game.<br/>
-GodMode does not fix Windows. It just asks it, politely and reversibly, to step aside.</sub>
+GamerGod does not fix Windows. It just asks it, politely and reversibly, to step aside.</sub>
 </div>

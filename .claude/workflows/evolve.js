@@ -1,6 +1,6 @@
 export const meta = {
   name: 'evolve',
-  description: 'Master architect plans GodMode\'s next move, dispatches specialists in parallel, then reviews',
+  description: 'Master architect plans GamerGod\'s next move, dispatches specialists in parallel, then reviews',
   whenToUse:
     'Run with args = a goal ("make onboarding great", "cut startup cost", "ship the overlay"), ' +
     'or with no args to let the architect choose what matters most. It plans, fans the plan out ' +
@@ -35,11 +35,11 @@ const PLAN_SCHEMA = {
           agent: {
             type: 'string',
             enum: [
-              'godmode-feature-architect',
-              'godmode-feature-builder',
-              'godmode-charter-critic',
-              'godmode-ux-designer',
-              'godmode-perf-engineer',
+              'gamergod-feature-architect',
+              'gamergod-feature-builder',
+              'gamergod-charter-critic',
+              'gamergod-ux-designer',
+              'gamergod-perf-engineer',
             ],
           },
           task: { type: 'string' },
@@ -98,7 +98,7 @@ independent only if they genuinely touch different files - two agents editing th
 parallel will conflict and waste the work.
 
 You must fill in "cut". A plan that only adds is a wish list.`,
-  { label: 'architect', phase: 'Plan', agentType: 'godmode-master-architect', schema: PLAN_SCHEMA }
+  { label: 'architect', phase: 'Plan', agentType: 'gamergod-master-architect', schema: PLAN_SCHEMA }
 )
 
 if (!plan || !plan.tasks?.length) {
@@ -138,7 +138,7 @@ something easier.`
 const parallelResults = await parallel(
   parallelTasks.map((t, i) => () =>
     agent(brief(t, i), {
-      label: `${t.agent.replace('godmode-', '')}:${i + 1}`,
+      label: `${t.agent.replace('gamergod-', '')}:${i + 1}`,
       phase: 'Execute',
       agentType: t.agent,
       schema: RESULT_SCHEMA,
@@ -151,7 +151,7 @@ const serialResults = []
 for (let i = 0; i < serialTasks.length; i++) {
   const t = serialTasks[i]
   const r = await agent(brief(t, parallelTasks.length + i), {
-    label: `${t.agent.replace('godmode-', '')}:seq${i + 1}`,
+    label: `${t.agent.replace('gamergod-', '')}:seq${i + 1}`,
     phase: 'Execute',
     agentType: t.agent,
     schema: RESULT_SCHEMA,
@@ -182,7 +182,7 @@ ${done.map(r => `- [${r.agent}] ${r.task}\n    ${r.summary}`).join('\n')}
 
 Run the full test suite yourself. Read test bodies, not just names. Be willing to say
 do-not-ship.`,
-  { label: 'critic', phase: 'Review', agentType: 'godmode-charter-critic', schema: REVIEW_SCHEMA }
+  { label: 'critic', phase: 'Review', agentType: 'gamergod-charter-critic', schema: REVIEW_SCHEMA }
 )
 
 return {

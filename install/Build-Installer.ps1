@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Publishes GodMode and stages the installer payload.
+    Publishes GamerGod and stages the installer payload.
 
 .DESCRIPTION
     Runs the whole gate in order: test, publish, stage. The tests run first and a failure
@@ -35,7 +35,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'installer') | O
 
 if (-not $SkipTests) {
     Step 'Running the safety suite'
-    & dotnet test (Join-Path $root 'GodMode.slnx') -c $Configuration --nologo
+    & dotnet test (Join-Path $root 'GamerGod.slnx') -c $Configuration --nologo
     if ($LASTEXITCODE -ne 0) {
         throw 'Tests failed. The build stops here - a release that skipped its safety suite is the one that should not exist.'
     }
@@ -46,9 +46,9 @@ else {
 }
 
 Step 'Publishing the command-line tool'
-# Self-contained: a player should be able to run GodMode without first being told to
+# Self-contained: a player should be able to run GamerGod without first being told to
 # install a .NET runtime. The size cost is worth not losing people at step one.
-& dotnet publish (Join-Path $root 'src\GodMode.Cli\GodMode.Cli.csproj') `
+& dotnet publish (Join-Path $root 'src\GamerGod.Cli\GamerGod.Cli.csproj') `
     -c $Configuration `
     -o $payload `
     --nologo
@@ -56,7 +56,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
 
 # The service ships later; stage it automatically once it exists so this script does not
 # need editing on the day it lands.
-$servicePath = Join-Path $root 'src\GodMode.Service\GodMode.Service.csproj'
+$servicePath = Join-Path $root 'src\GamerGod.Service\GamerGod.Service.csproj'
 if (Test-Path $servicePath) {
     Step 'Publishing the background service'
     & dotnet publish $servicePath -c $Configuration -r win-x64 --self-contained false -o $payload --nologo
@@ -73,7 +73,7 @@ Get-ChildItem $payload -File | Select-Object Name, @{ n = 'KB'; e = { [math]::Ro
 $iscc = Get-Command iscc -ErrorAction SilentlyContinue
 if ($iscc) {
     Step 'Compiling the installer'
-    & $iscc.Source (Join-Path $PSScriptRoot 'godmode.iss')
+    & $iscc.Source (Join-Path $PSScriptRoot 'gamergod.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
     Write-Host "`n  Installer written to $artifacts\installer" -ForegroundColor Green
 }
@@ -81,7 +81,7 @@ else {
     Write-Host "`n  Inno Setup not found, so no .exe was produced." -ForegroundColor Yellow
     Write-Host '  Install it with:  winget install JRSoftware.InnoSetup'
     Write-Host '  Or install directly without an installer:'
-    Write-Host "      pwsh $PSScriptRoot\Install-GodMode.ps1" -ForegroundColor Cyan
+    Write-Host "      pwsh $PSScriptRoot\Install-GamerGod.ps1" -ForegroundColor Cyan
 }
 
 Write-Host ''

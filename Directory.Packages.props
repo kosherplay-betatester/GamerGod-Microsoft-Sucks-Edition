@@ -5,7 +5,7 @@
   </PropertyGroup>
   <!--
     Dependencies are kept deliberately minimal and permissively licensed.
-    GodMode ships under GPLv3 and must stay unambiguously redistributable, so we avoid
+    GamerGod ships under GPLv3 and must stay unambiguously redistributable, so we avoid
     packages with commercial or source-available licence terms. Assertions use xUnit's
     built-in Assert rather than FluentAssertions for exactly this reason.
   -->

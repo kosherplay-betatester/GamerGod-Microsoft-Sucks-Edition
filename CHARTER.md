@@ -1,17 +1,17 @@
-# The GodMode Charter
+# The GamerGod Charter
 
 This is a constitution, not a roadmap. Everything below is a permanent constraint on
 what this project may become. A pull request that violates the Charter is rejected on
 sight, regardless of how many frames it wins.
 
-If you fork GodMode, you inherit the Charter. That is the point of the GPL.
+If you fork GamerGod, you inherit the Charter. That is the point of the GPL.
 
 ---
 
 ## I. We will never break your games
 
 **This outranks performance.** A build that gains 20% and breaks one anti-cheat is a
-failed build. GodMode's effect on a running game must be *observationally equivalent to
+failed build. GamerGod's effect on a running game must be *observationally equivalent to
 a normal Windows install* — same loaded modules, same handles, same registry view, same
 devices, same environment. Only the machine around it gets quieter.
 
@@ -23,16 +23,16 @@ This is enforced architecturally by the **Ambient / Contact** classification
   title protected by kernel anti-cheat.**
 
 For Battlefield 6, Valorant, Fortnite, Apex, Rainbow Six, or anything else running a
-kernel anti-cheat, GodMode runs **100% Ambient. It never opens a handle to the game.**
+kernel anti-cheat, GamerGod runs **100% Ambient. It never opens a handle to the game.**
 
 ## II. We will never ship a kernel driver
 
 Not for core parking, not for MSR access, not for timer resolution, not for anything.
 
 Kernel anti-cheats boot with Windows specifically to catch third-party kernel drivers,
-and are documented to conflict with them. A GodMode driver would be the single most
+and are documented to conflict with them. A GamerGod driver would be the single most
 likely cause of the exact problem this project exists to prevent. It would also
-permanently destroy our ability to say "GodMode cannot destabilize your system."
+permanently destroy our ability to say "GamerGod cannot destabilize your system."
 
 Any feature that requires a driver is not a feature. It is out of scope forever.
 
@@ -50,7 +50,7 @@ we do not make exceptions for "just this one useful case."
 No analytics. No phone-home. No crash reporting to a server. No update ping. No
 unique install ID. No "anonymous usage statistics."
 
-GodMode makes no outbound network connections except ones you explicitly initiate
+GamerGod makes no outbound network connections except ones you explicitly initiate
 (checking for a release, downloading a community profile). Everything it learns about
 your machine stays on your machine.
 
@@ -65,7 +65,7 @@ games — Battlefield 6's Javelin anti-cheat *requires* Secure Boot and TPM 2.0 
 HVCI and VBS capability as requirements. Disabling them does not slow that game down;
 it makes it refuse to launch.
 
-GodMode does the opposite: it **detects** these being off and warns you which titles
+GamerGod does the opposite: it **detects** these being off and warns you which titles
 will not start.
 
 *(Per-folder Defender exclusions for game install directories are the one adjacent thing
@@ -84,7 +84,7 @@ not remove Windows components. We do not "debloat."
 
 ## VII. We will never claim a benefit we have not measured
 
-Every toggle in GodMode displays a real measured delta with a confidence interval, taken
+Every toggle in GamerGod displays a real measured delta with a confidence interval, taken
 on **your** hardware — or it displays the word `UNMEASURED` in grey.
 
 A tweak whose confidence interval straddles zero is reported as "no measurable effect,"
@@ -93,7 +93,7 @@ even when the internet insists otherwise. Especially then.
 Community profiles without measurement evidence attached are marked `unverified` and are
 never applied by default.
 
-## VIII. GodMode is free, forever
+## VIII. GamerGod is free, forever
 
 GPLv3. No paid tier, no "pro" version, no feature gated behind a purchase, no sponsored
 tweaks, no bundled software, no affiliate links.

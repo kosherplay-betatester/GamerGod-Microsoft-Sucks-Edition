@@ -1,12 +1,12 @@
 # Getting started
 
-**GodMode changes nothing until you tell it to.** Everything below is safe to try right now.
+**GamerGod changes nothing until you tell it to.** Everything below is safe to try right now.
 
 ---
 
 ## Install it
 
-Download `GodMode-Setup.exe` from [Releases](https://github.com/kosherplay-betatester/GodMode-Microsoft-Sucks-Edition/releases)
+Download `GamerGod-Setup.exe` from [Releases](https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition/releases)
 and run it. That's the whole thing.
 
 It will ask for administrator, because it registers a background service whose only job is to
@@ -17,10 +17,10 @@ does any of it.
 <summary>Prefer not to run an installer?</summary>
 
 ```powershell
-git clone https://github.com/kosherplay-betatester/GodMode-Microsoft-Sucks-Edition
-cd GodMode-Microsoft-Sucks-Edition
+git clone https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition
+cd GamerGod-Microsoft-Sucks-Edition
 pwsh install\Build-Installer.ps1
-pwsh install\Install-GodMode.ps1
+pwsh install\Install-GamerGod.ps1
 ```
 
 Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download). The installed program doesn't —
@@ -34,7 +34,7 @@ it's self-contained.
 
 Open a terminal — press `Win`, type `terminal`, press Enter.
 
-### `godmode scan`
+### `gamergod scan`
 
 Checks your PC for things quietly costing you frames, or stopping games from launching.
 
@@ -47,7 +47,7 @@ You'll get findings ranked by how much they actually cost you, each with a plain
 and what to do about it. If your PC is in good shape, it says so and stops. It won't invent
 problems to look busy.
 
-### `godmode topology`
+### `gamergod topology`
 
 Draws your CPU and shows which cores your games will get.
 
@@ -80,18 +80,18 @@ instead of pretending.
 **Will this get me banned?**
 
 No. For any game with kernel anti-cheat — Battlefield 6, Valorant, Fortnite, Apex, Rainbow
-Six, Call of Duty — GodMode never touches the game. Not "we're careful about it": there is no
+Six, Call of Duty — GamerGod never touches the game. Not "we're careful about it": there is no
 code path that can. It only moves *other* programs out of your game's way, which your game has
 no way to see.
 
 That's checked automatically on every build, and if an anti-cheat ever shows up that nobody
-has catalogued, GodMode assumes the strictest possible answer.
+has catalogued, GamerGod assumes the strictest possible answer.
 
 **Can it break my PC?**
 
-Every change is written down before it's made, and undone when you're finished. If GodMode
+Every change is written down before it's made, and undone when you're finished. If GamerGod
 crashes, a background service undoes them. If that fails, **rebooting always works** — that's
-guaranteed by design, not by GodMode still running.
+guaranteed by design, not by GamerGod still running.
 
 It will never suspend your fan or pump control software, so it can't cause an overheat. It
 will never stop the services your controller, sound, or network need. Those lists can't be
@@ -100,7 +100,7 @@ overridden by any setting.
 **Do I need to keep it open?**
 
 No. Once the engine ships, it arms itself when a game starts and steps back out when you're
-done. You open GodMode to see what happened, not to make it happen.
+done. You open GamerGod to see what happened, not to make it happen.
 
 **Does it phone home?**
 
@@ -117,7 +117,7 @@ Nothing, forever. GPLv3, no paid tier, no bundled extras.
 Add or Remove Programs, like any other app. Or:
 
 ```powershell
-pwsh "C:\Program Files\GodMode\install\Uninstall-GodMode.ps1"
+pwsh "C:\Program Files\GamerGod\install\Uninstall-GamerGod.ps1"
 ```
 
 Your machine is restored **before** anything is deleted, and you get a receipt showing exactly
@@ -127,11 +127,11 @@ what was put back. Add `-KeepData` to keep your measurement history.
 
 ## If something goes wrong
 
-**Reboot.** Every change GodMode makes is undone at startup by design, and that doesn't depend
-on GodMode working.
+**Reboot.** Every change GamerGod makes is undone at startup by design, and that doesn't depend
+on GamerGod working.
 
-Then [open an issue](https://github.com/kosherplay-betatester/GodMode-Microsoft-Sucks-Edition/issues)
-with the output of `godmode scan`. It's read-only, so it's safe to share — though it does list
+Then [open an issue](https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition/issues)
+with the output of `gamergod scan`. It's read-only, so it's safe to share — though it does list
 your hardware, so look it over first.
 
 ---
