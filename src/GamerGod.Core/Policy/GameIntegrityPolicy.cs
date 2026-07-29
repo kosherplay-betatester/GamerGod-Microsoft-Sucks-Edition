@@ -71,15 +71,34 @@ public sealed record MutationPermit
 
     public required AntiCheatAssessment Assessment { get; init; }
 
-    /// <summary>Null when contact is refused, which is the common and default case.</summary>
-    public ContactGrant? Contact { get; init; }
+    /// <summary>
+    /// Null when contact is refused, which is the common and default case.
+    ///
+    /// <para>
+    /// The setter is internal deliberately. With a public one, <c>permit with { Contact =
+    /// someGrant }</c> would move a grant issued for a safe title onto a permit for a
+    /// kernel-protected one, without ever calling the guarded factory — defeating the
+    /// project's central guarantee through ordinary record syntax.
+    /// </para>
+    /// </summary>
+    public ContactGrant? Contact { get; internal init; }
 
     public bool IsAmbientOnly => Contact is null;
 
     public bool Allows(IMutation mutation)
     {
         ArgumentNullException.ThrowIfNull(mutation);
-        return mutation.Visibility == MutationVisibility.Ambient || Contact is not null;
+
+        if (mutation.Visibility == MutationVisibility.Ambient)
+        {
+            return true;
+        }
+
+        // Both conditions, every time. Checking the grant alone would trust a token that
+        // might have been attached to the wrong permit; checking the assessment alone would
+        // ignore the user's opt-in. Requiring both means a forged or misplaced grant still
+        // cannot enable contact on a protected title.
+        return Contact is not null && Assessment.ContactIsConsidered;
     }
 
     /// <summary>
@@ -138,7 +157,16 @@ public static class GameIntegrityPolicy
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentNullException.ThrowIfNull(assessment);
 
-        var grant = preference == ContactPreference.WhenProvablySafe && assessment.ContactIsConsidered
+        // An assessment is data and can be constructed by hand, so its declared tier is not
+        // trusted over its own evidence. If any finding names a kernel product, that decides
+        // the outcome regardless of what the Tier field claims - a caller cannot obtain
+        // contact by asserting None while carrying a Vanguard finding.
+        var contradicted = !assessment.Findings.IsDefaultOrEmpty
+            && assessment.Findings.Any(f => f.Tier == AntiCheatTier.Kernel && f.EstablishesTier);
+
+        var grant = preference == ContactPreference.WhenProvablySafe
+                    && assessment.ContactIsConsidered
+                    && !contradicted
             ? ContactGrant.Issue(title, assessment.Tier)
             : null;
 

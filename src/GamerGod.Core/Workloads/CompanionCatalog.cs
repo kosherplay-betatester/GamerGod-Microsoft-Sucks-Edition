@@ -125,8 +125,12 @@ public static class CompanionCatalog
     {
         ArgumentNullException.ThrowIfNull(installedProcessNames);
 
+        // Strip only a trailing ".exe", never via Path.GetFileNameWithoutExtension. Several
+        // of these processes have dots in the name itself - "Playnite.FullscreenApp" would be
+        // truncated to "Playnite", so an installed Playnite was reported as missing and the
+        // user was invited to install what they already had.
         var present = new HashSet<string>(
-            installedProcessNames.Select(Path.GetFileNameWithoutExtension).OfType<string>(),
+            installedProcessNames.Select(StripExeSuffix).OfType<string>(),
             StringComparer.OrdinalIgnoreCase);
 
         return All
@@ -142,5 +146,25 @@ public static class CompanionCatalog
     {
         ArgumentNullException.ThrowIfNull(companion);
         return $"winget install --id {companion.WingetId} --accept-package-agreements";
+    }
+
+    private static string? StripExeSuffix(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        var trimmed = name.Trim().Trim('"');
+
+        var slash = trimmed.LastIndexOfAny(['\\', '/']);
+        if (slash >= 0)
+        {
+            trimmed = trimmed[(slash + 1)..];
+        }
+
+        return trimmed.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? trimmed[..^4]
+            : trimmed;
     }
 }

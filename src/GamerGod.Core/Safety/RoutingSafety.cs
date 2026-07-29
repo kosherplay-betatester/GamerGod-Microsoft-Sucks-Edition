@@ -146,12 +146,27 @@ public static class RoutingSafety
         return restricted.IsEmpty ? domain.Processors : restricted;
     }
 
+    /// <summary>
+    /// The processors that exist <em>in the game domain's group</em>.
+    ///
+    /// <para>
+    /// Combining masks across processor groups would defeat the check it feeds: group 1's
+    /// processors set the same bits as group 0's, so ORing them produces a mask in which
+    /// almost every bit looks valid, and a mask naming processors this machine does not have
+    /// would pass unnoticed.
+    /// </para>
+    /// </summary>
     private static ulong MachineMask(CpuTopology topology)
     {
+        var group = topology.GameDomain.Processors.Group;
         var mask = 0UL;
+
         foreach (var domain in topology.Domains)
         {
-            mask |= domain.Processors.Mask;
+            if (domain.Processors.Group == group)
+            {
+                mask |= domain.Processors.Mask;
+            }
         }
 
         return mask;

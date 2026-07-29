@@ -148,12 +148,66 @@ public static class ProcessSafetyPolicy
         Audio("voicemod", "Voicemod is in the audio path."),
 
         // ---- Anti-cheat. Charter Article I.
-        AntiCheat("easyanticheat", "EasyAntiCheat."),
-        AntiCheat("beservice", "BattlEye."),
-        AntiCheat("eaanticheat.gameservice", "EA Javelin."),
-        AntiCheat("vgtray", "Riot Vanguard tray."),
-        AntiCheat("vgc", "Riot Vanguard."),
-        AntiCheat("start_protected_game", "EasyAntiCheat launcher."),
+        // Every process named by AntiCheatDetector is added automatically below, so the two
+        // lists cannot drift apart.
+        AntiCheat("eaanticheat.gameservicelauncher", "EA Javelin launcher."),
+
+        // ---- Remote play and remote desktop.
+        //
+        // The worst lockout GamerGod could cause. Somebody playing from another room or
+        // another house has no keyboard at the machine: suspending the host that carries
+        // their screen and input takes away the desktop, the panic hotkey, the controller
+        // combo and the ability to see anything at all - all four documented escape paths at
+        // once. The only remaining recovery is physically walking to the machine.
+        Input("parsecd", "Parsec host. Suspending it ends the session with no way back in."),
+        Input("parsec", "Parsec."),
+        Input("sunshine", "Sunshine streaming host, used by Moonlight clients."),
+        Input("nvstreamer", "NVIDIA GameStream host."),
+        Input("nvcontainer", "NVIDIA container hosting streaming and driver services."),
+        Input("steam_streaming_host", "Steam Remote Play host."),
+        Input("streaming_client", "Steam Remote Play client host."),
+        Input("rdpclip", "Remote Desktop clipboard host."),
+        Input("termsrv", "Remote Desktop Services host."),
+        Input("teamviewer", "TeamViewer remote session."),
+        Input("teamviewer_service", "TeamViewer service."),
+        Input("anydesk", "AnyDesk remote session."),
+        Input("rustdesk", "RustDesk remote session."),
+        Input("remote_assistance_host", "Chrome Remote Desktop host."),
+        Input("moonlight", "Moonlight client."),
+
+        // ---- VR runtimes.
+        //
+        // A headset is on the user's face. Suspending a compositor freezes the image inside
+        // it, which is disorienting at best and genuinely unpleasant at worst - and the user
+        // cannot see a screen to fix it. VR compositors are also latency-critical, so they
+        // belong on the game's domain rather than being demoted.
+        Input("vrserver", "SteamVR runtime. Suspending it freezes the image inside a headset."),
+        Input("vrcompositor", "SteamVR compositor. Freezing this freezes what the user sees."),
+        Input("vrmonitor", "SteamVR monitor."),
+        Input("vrdashboard", "SteamVR dashboard."),
+        Input("ovrserver_x64", "Oculus runtime."),
+        Input("oculusclient", "Oculus client."),
+        Input("mixedrealityportal", "Windows Mixed Reality portal."),
+        Input("virtualdesktop.streamer", "Virtual Desktop streamer, which carries the headset image."),
+        Input("alvr_dashboard", "ALVR streaming host."),
+        Input("wivrn", "WiVRn streaming host."),
+
+        // ---- Accessibility.
+        //
+        // For some users this software is the only way to operate the machine at all.
+        // Suspending it does not inconvenience them, it locks them out, and no amount of
+        // performance is worth that.
+        Input("narrator", "Windows Narrator. For some users this is the only output."),
+        Input("magnify", "Windows Magnifier."),
+        Input("osk", "On-screen keyboard. May be the only input available."),
+        Input("nvda", "NVDA screen reader."),
+        Input("jfw", "JAWS screen reader."),
+        Input("dragonbar", "Dragon NaturallySpeaking voice control."),
+        Input("natspeak", "Dragon NaturallySpeaking engine."),
+        Input("tobiigameHub", "Tobii eye tracking."),
+        Input("tobii.eyex.engine", "Tobii EyeX engine."),
+        Input("eyewarecore", "Eyeware head and eye tracking."),
+        Input("voiceattack", "VoiceAttack voice control."),
 
         // ---- Communication. Suspending these drops the user mid-match.
         Communication("discord", "Discord. Suspending it drops an active voice call."),
@@ -167,8 +221,32 @@ public static class ProcessSafetyPolicy
         Recovery("gamergod", "GamerGod."),
     ];
 
+    /// <summary>
+    /// Every anti-cheat process the detector knows about, derived rather than duplicated so
+    /// the two lists cannot fall out of step as vendors are added.
+    /// </summary>
+    private static readonly ImmutableArray<ProcessProtection> DerivedAntiCheat =
+        Policy.AntiCheatDetector.BuiltInSignatures
+            .Where(s => s.Tier == Policy.AntiCheatTier.Kernel)
+            .SelectMany(s => s.Processes.Select(name => new ProcessProtection(
+                StripExtension(name),
+                ProcessRisk.AntiCheat,
+                $"{s.Vendor}. Suspending it breaks every game that uses it.")))
+            .DistinctBy(p => p.Process, StringComparer.OrdinalIgnoreCase)
+            .ToImmutableArray();
+
+    /// <summary>Everything protected: the explicit list plus every detector-known anti-cheat.</summary>
+    public static ImmutableArray<ProcessProtection> All { get; } =
+        Protected
+            .Concat(DerivedAntiCheat)
+            .DistinctBy(p => p.Process, StringComparer.OrdinalIgnoreCase)
+            .ToImmutableArray();
+
     private static readonly ImmutableDictionary<string, ProcessProtection> Index =
-        Protected.ToImmutableDictionary(p => p.Process, StringComparer.OrdinalIgnoreCase);
+        All.ToImmutableDictionary(p => p.Process, StringComparer.OrdinalIgnoreCase);
+
+    private static string StripExtension(string name) =>
+        name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? name[..^4] : name;
 
     /// <summary>True when suspending this process could harm hardware or hang the machine.</summary>
     public static bool IsProtected(string processName) => Explain(processName) is not null;

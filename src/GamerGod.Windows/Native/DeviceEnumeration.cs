@@ -227,17 +227,38 @@ internal static class SystemFacts
     }
 
     /// <summary>
-    /// A TPM is present and usable. Asked through the TPM Base Services provider rather
-    /// than by reading registry state, because what matters is whether the device actually
-    /// answers — which is also what an anti-cheat's platform check will find.
+    /// A TPM 2.0 is present and usable.
+    ///
+    /// <para>
+    /// Asked through TPM Base Services rather than read from the registry, because what
+    /// matters is whether the device actually answers — which is also what an anti-cheat's
+    /// platform check will find.
+    /// </para>
+    ///
+    /// <para>
+    /// The reported version is checked, not just the call's success. A TPM 1.2 or a
+    /// software-emulated TPM answers happily, and reporting it as "TPM 2.0 ready" would tell
+    /// a user their machine can run titles that will in fact refuse to launch — precisely the
+    /// wrong way for this check to be wrong.
+    /// </para>
     /// </summary>
     public static bool TpmReady()
     {
-        // TPM_DEVICE_INFO: four DWORDs.
-        var buffer = Marshal.AllocHGlobal(16);
+        // TPM_DEVICE_INFO: structVersion, tpmVersion, tpmInterfaceType, tpmImpRevision.
+        const int Size = 16;
+        const int TpmVersionOffset = 4;
+        const uint TpmVersion20 = 2;
+
+        var buffer = Marshal.AllocHGlobal(Size);
         try
         {
-            return Tbsi_GetDeviceInfo(16, buffer) == 0;
+            if (Tbsi_GetDeviceInfo(Size, buffer) != 0)
+            {
+                return false;
+            }
+
+            var version = (uint)Marshal.ReadInt32(buffer, TpmVersionOffset);
+            return version >= TpmVersion20;
         }
         catch (DllNotFoundException)
         {

@@ -105,15 +105,11 @@ public static class ServiceSafetyPolicy
         Deny("Power", ProtectionReason.CoreOperatingSystem, "Power service. Core to processor power states."),
 
         // ---- Anti-cheat. Charter Article I.
-        Deny("EAAntiCheatService", ProtectionReason.AntiCheat,
-            "EA Javelin. Battlefield 6 will not run without it."),
-        Deny("EasyAntiCheat", ProtectionReason.AntiCheat, "EasyAntiCheat."),
-        Deny("EasyAntiCheat_EOS", ProtectionReason.AntiCheat, "EasyAntiCheat for Epic Online Services."),
-        Deny("BEService", ProtectionReason.AntiCheat, "BattlEye."),
-        Deny("vgc", ProtectionReason.AntiCheat, "Riot Vanguard client."),
-        Deny("vgk", ProtectionReason.AntiCheat, "Riot Vanguard kernel component."),
-        Deny("xhunter1", ProtectionReason.AntiCheat, "XIGNCODE3."),
-        Deny("npggsvc", ProtectionReason.AntiCheat, "nProtect GameGuard."),
+        //
+        // Every service named by AntiCheatDetector is added automatically below, so the two
+        // lists cannot drift apart. An audit found seven products the detector classified as
+        // kernel anti-cheat while this list left their services stoppable - the kind of gap
+        // that opens quietly every time a vendor is added in one place and not the other.
         Deny("Steam Client Service", ProtectionReason.AntiCheat, "Steam client service."),
         Deny("SteamInputDriver", ProtectionReason.Input, "Steam Input controller support."),
 
@@ -138,14 +134,62 @@ public static class ServiceSafetyPolicy
         Deny("SamSs", ProtectionReason.CoreOperatingSystem, "Security Accounts Manager."),
         Deny("Winmgmt", ProtectionReason.CoreOperatingSystem, "WMI. Widely depended upon by drivers and tools."),
 
+        // ---- Dependencies of protected services.
+        //
+        // Protecting a service is not enough on its own: the service control manager stops
+        // dependents along with their dependency. Leaving BFE stoppable would have taken the
+        // Windows Firewall down with it, defeating the protection on mpssvc entirely - the
+        // list would have looked correct while the outcome was not.
+        Deny("BFE", ProtectionReason.Security,
+            "Base Filtering Engine. Stopping it stops the Windows Firewall with it."),
+        Deny("IKEEXT", ProtectionReason.Network, "IKE and AuthIP keying. VPN connections depend on it."),
+        Deny("RpcEptMapper", ProtectionReason.CoreOperatingSystem,
+            "RPC endpoint mapper. RpcSs cannot run without it."),
+        Deny("BrokerInfrastructure", ProtectionReason.CoreOperatingSystem,
+            "Background task broker. A wide range of system services depend on it."),
+        Deny("SystemEventsBroker", ProtectionReason.CoreOperatingSystem, "System events broker."),
+        Deny("CoreMessagingRegistrar", ProtectionReason.CoreOperatingSystem,
+            "Core messaging. Audio and input services depend on it."),
+        Deny("StateRepository", ProtectionReason.CoreOperatingSystem, "State repository service."),
+        Deny("UserManager", ProtectionReason.CoreOperatingSystem, "User manager. Session services depend on it."),
+        Deny("NcbService", ProtectionReason.Network, "Network connection broker."),
+        Deny("TimeBrokerSvc", ProtectionReason.CoreOperatingSystem, "Time broker, used by scheduled work."),
+
         // ---- GamerGod's own recovery path.
         Deny("EventLog", ProtectionReason.Recovery, "Event log. GamerGod's diagnostics and post-crash trail."),
         Deny("VSS", ProtectionReason.Recovery, "Volume Shadow Copy. Restore points depend on it."),
         Deny("swprv", ProtectionReason.Recovery, "Shadow copy provider."),
     ];
 
+    /// <summary>
+    /// Every anti-cheat service the detector knows about, derived rather than duplicated.
+    ///
+    /// <para>
+    /// Deriving is the point. A hand-maintained copy of this list will fall behind the
+    /// detector the first time somebody adds a vendor, and the failure is silent: GamerGod
+    /// would correctly identify a title as kernel-protected and then happily stop the
+    /// service protecting it.
+    /// </para>
+    /// </summary>
+    private static readonly ImmutableArray<ServiceProtection> DerivedAntiCheat =
+        Policy.AntiCheatDetector.BuiltInSignatures
+            .Where(s => s.Tier == Policy.AntiCheatTier.Kernel)
+            .SelectMany(s => s.Services.Select(name => new ServiceProtection(
+                name,
+                ProtectionReason.AntiCheat,
+                $"{s.Vendor}. Stopping this prevents every game that uses it from running.")))
+            .DistinctBy(p => p.Service, StringComparer.OrdinalIgnoreCase)
+            .ToImmutableArray();
+
+    /// <summary>Everything protected: the explicit list plus every detector-known anti-cheat.</summary>
+    public static ImmutableArray<ServiceProtection> All { get; } =
+        Protected
+            .Concat(DerivedAntiCheat)
+            .DistinctBy(p => p.Service, StringComparer.OrdinalIgnoreCase)
+            .ToImmutableArray();
+
     private static readonly ImmutableDictionary<string, ServiceProtection> Index =
-        Protected.ToImmutableDictionary(p => p.Service, StringComparer.OrdinalIgnoreCase);
+        All.ToImmutableDictionary(p => p.Service, StringComparer.OrdinalIgnoreCase);
 
     private static ServiceProtection Deny(string service, ProtectionReason reason, string explanation) =>
         new(service, reason, explanation);

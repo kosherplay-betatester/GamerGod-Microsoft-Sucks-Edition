@@ -106,7 +106,10 @@ public sealed record AntiCheatAssessment
     /// </summary>
     public bool ContactIsConsidered => Tier is AntiCheatTier.None or AntiCheatTier.UserMode;
 
-    public string Explain() => Findings.IsEmpty
+    // IsDefaultOrEmpty, not IsEmpty: this record can be constructed by hand, and IsEmpty
+    // throws on a default-valued ImmutableArray. Explain() is called from the ledger while
+    // opening a session, so throwing here would abort a session over a description string.
+    public string Explain() => Findings.IsDefaultOrEmpty
         ? "No anti-cheat signature matched. Treating as kernel-protected, because anti-cheat "
           + "components commonly load only once a game starts."
         : string.Join("; ", Findings.Select(f => $"{f.Vendor} ({f.Tier}) via {f.Evidence}"));
