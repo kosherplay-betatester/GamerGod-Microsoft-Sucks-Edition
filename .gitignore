@@ -1,0 +1,55 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+artifacts/
+publish/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / VS / VS Code
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# Test + coverage
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+coverage*.info
+*.coverage
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+
+# GodMode runtime artifacts — NEVER commit a user's captured state
+**/GodMode/state/
+**/GodMode/logs/
+**/GodMode/archive/
+*.journal
+*.etl
+*.wpapk
+bench-results/
+local-measurements/
+
+# Native SDK drops (fetched by tools/fetch-sdks.ps1, not vendored)
+third_party/PresentMon/
+third_party/nvapi/
+third_party/ADLX/
+third_party/igcl/
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
