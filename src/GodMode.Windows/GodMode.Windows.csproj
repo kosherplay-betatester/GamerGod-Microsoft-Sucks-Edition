@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      The only project in the solution permitted to P/Invoke. GodMode.Core and
+      GodMode.Engine must never reference it - an architecture test enforces that, and it
+      is what keeps the ledger testable against a fake OS with no admin rights.
+    -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GodMode.Core\GodMode.Core.csproj" />
+  </ItemGroup>
+
+</Project>

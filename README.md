@@ -146,6 +146,21 @@ This is the people's project. GPLv3, free forever, no paid tier.
 Two rules: read [the Charter](CHARTER.md) first, and **bring evidence**. Community profiles
 without measurement data attached are marked `unverified` and never applied by default.
 
+### Why GPLv3 and not MIT
+
+GPLv3 places no restriction on *you*. Use it, modify it, run it, share it, build a business
+around it — all fine. The only thing it prevents is taking GodMode, closing the source, and
+redistributing it that way.
+
+For this project specifically that isn't ideology, it's a safety property. GodMode runs as
+LocalSystem in the same neighbourhood as kernel anti-cheat. If someone ships a closed fork
+that *does* inject, or *does* load a driver, and still calls it GodMode, the damage lands on
+users and on this project's standing with anti-cheat vendors — and that is the one thing
+that cannot be undone. Copyleft means every fork stays auditable.
+
+The plugin API and profile schema are permissively licensed so the extension ecosystem
+stays wide open.
+
 ---
 
 <div align="center">
