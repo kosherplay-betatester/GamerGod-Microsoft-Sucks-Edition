@@ -10,7 +10,7 @@
 ;   2. iscc install\gamergod.iss
 
 #define AppName "GamerGod"
-#define AppVersion "0.1.0"
+#define AppVersion "1.0.0"
 #define AppPublisher "GamerGod contributors"
 #define AppUrl "https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition"
 #define CliExe "gamergod.exe"
@@ -58,9 +58,14 @@ Source: "..\CHARTER.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\GamerGod"; Filename: "{app}\{#CliExe}"; Parameters: "scan"
+Name: "{group}\GamerGod"; Filename: "{app}\app\GamerGod.exe"; WorkingDir: "{app}\app"
+Name: "{autodesktop}\GamerGod"; Filename: "{app}\app\GamerGod.exe"; WorkingDir: "{app}\app"; Tasks: desktopicon
+Name: "{group}\Check my machine"; Filename: "{app}\{#CliExe}"; Parameters: "scan"
 Name: "{group}\What GamerGod will never do"; Filename: "{app}\CHARTER.md"
 Name: "{group}\Uninstall GamerGod"; Filename: "{uninstallexe}"
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
 
 [Run]
 ; The PowerShell script is the single source of truth for what installation changes.
@@ -69,8 +74,9 @@ Filename: "powershell.exe"; \
   StatusMsg: "Registering GamerGod..."; \
   Flags: runhidden waituntilterminated
 
-Filename: "{app}\{#CliExe}"; Parameters: "scan"; \
-  Description: "Check this machine for things that cost you frames (changes nothing)"; \
+Filename: "{app}\app\GamerGod.exe"; \
+  Description: "Open GamerGod"; \
+  WorkingDir: "{app}\app"; \
   Flags: postinstall nowait skipifsilent
 
 [UninstallRun]

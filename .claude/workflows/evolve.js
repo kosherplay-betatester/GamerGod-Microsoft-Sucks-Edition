@@ -1,10 +1,7 @@
 export const meta = {
   name: 'evolve',
   description: 'Master architect plans GamerGod\'s next move, dispatches specialists in parallel, then reviews',
-  whenToUse:
-    'Run with args = a goal ("make onboarding great", "cut startup cost", "ship the overlay"), ' +
-    'or with no args to let the architect choose what matters most. It plans, fans the plan out ' +
-    'to the right specialists, reviews the result against the Charter, and reports what it cut.',
+  whenToUse: 'Run with args = a goal, or with no args to let the architect choose what matters most. It plans, fans the plan out to the right specialists, reviews the result against the Charter, and reports what it cut.',
   phases: [
     { title: 'Plan', detail: 'master architect surveys the product and decides what to build' },
     { title: 'Execute', detail: 'specialists work the plan in parallel' },

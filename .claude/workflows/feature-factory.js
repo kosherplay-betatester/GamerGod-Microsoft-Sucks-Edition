@@ -1,10 +1,7 @@
 export const meta = {
   name: 'feature-factory',
   description: 'Design, build, review and harden a GamerGod feature end to end',
-  whenToUse:
-    'Run with args = the feature description, e.g. "EcoQoS demotion of background processes". ' +
-    'Chains architect -> builder -> critic -> fixer, and loops until the critic says SHIP or ' +
-    'the round budget is spent. Declines anything that violates the Charter.',
+  whenToUse: 'Run with args = the feature description. Chains architect to builder to critic to fixer, looping until the critic says SHIP or the round budget is spent. Declines anything that violates the Charter.',
   phases: [
     { title: 'Design', detail: 'architect turns the request into a buildable spec' },
     { title: 'Build', detail: 'builder implements it test-first' },

@@ -54,6 +54,19 @@ Step 'Publishing the command-line tool'
     --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Publish failed.' }
 
+# The desktop app goes in its own subfolder, and that is not cosmetic. The command is
+# gamergod.exe and the app is GamerGod.exe - identical filenames on a case-insensitive
+# filesystem, so in one folder the second publish would silently overwrite the first and the
+# installer would ship one program under two names.
+Step 'Publishing the desktop app'
+$appPayload = Join-Path $payload 'app'
+New-Item -ItemType Directory -Force -Path $appPayload | Out-Null
+& dotnet publish (Join-Path $root 'src\GamerGod.Ui\GamerGod.Ui.csproj') `
+    -c $Configuration `
+    -o $appPayload `
+    --nologo
+if ($LASTEXITCODE -ne 0) { throw 'Desktop app publish failed.' }
+
 # The service ships later; stage it automatically once it exists so this script does not
 # need editing on the day it lands.
 $servicePath = Join-Path $root 'src\GamerGod.Service\GamerGod.Service.csproj'

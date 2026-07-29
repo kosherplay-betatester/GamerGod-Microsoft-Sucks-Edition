@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/GamerGod.Cli/GamerGod.Cli.csproj" />
     <Project Path="src/GamerGod.Core/GamerGod.Core.csproj" />
+    <Project Path="src/GamerGod.Ui/GamerGod.Ui.csproj" />
     <Project Path="src/GamerGod.Windows/GamerGod.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">
