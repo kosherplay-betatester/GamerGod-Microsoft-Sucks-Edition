@@ -15,7 +15,7 @@
     <Company>GamerGod</Company>
     <Product>GamerGod: Microsoft Sucks Edition</Product>
     <Copyright>Copyright (C) 2026 GamerGod contributors. Licensed GPLv3.</Copyright>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 

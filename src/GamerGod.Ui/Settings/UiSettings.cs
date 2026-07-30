@@ -74,6 +74,24 @@ public sealed record UiSettings
     /// </summary>
     public bool FetchCoverArt { get; init; }
 
+    /// <summary>
+    /// Ask GitHub, when GamerGod starts, whether a newer release exists.
+    ///
+    /// <para>
+    /// Off by default. Charter Article IV forbids an update ping in one sentence and permits
+    /// "checking for a release" in the next — the difference between those is entirely consent,
+    /// so this is never inferred, never defaulted on, and never re-enabled by an upgrade.
+    /// </para>
+    ///
+    /// <para>
+    /// Worth being plain about what enabling it costs: GitHub sees an anonymous request from
+    /// this machine's address each time the application starts. No identifier is attached and
+    /// nothing about the machine is sent, but the request itself is visible, which is exactly
+    /// why it is a choice rather than a default.
+    /// </para>
+    /// </summary>
+    public bool CheckForUpdates { get; init; }
+
     // ---- Overlay ------------------------------------------------------
 
     /// <summary>Off by default, per the design. It is opt-in and instant either way.</summary>

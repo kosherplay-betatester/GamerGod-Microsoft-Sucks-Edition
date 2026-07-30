@@ -19,6 +19,7 @@ using GamerGod.Core.Library;
 using GamerGod.Core.Mutations;
 using GamerGod.Core.Policy;
 using GamerGod.Core.Safety;
+using GamerGod.Core.Updates;
 using GamerGod.Ui.Audio;
 using GamerGod.Ui.Library;
 using GamerGod.Ui.Settings;
@@ -36,6 +37,7 @@ public partial class MainWindow : Window
     private bool _libraryLoaded;
     private bool _catalogueLoaded;
     private GameTile? _selected;
+    private AvailableRelease? _update;
 
     /// <summary>Catalogue row icons, by entry id, so installed programs can upgrade in place.</summary>
     private readonly Dictionary<string, Image> _catalogueIcons = [];
@@ -104,6 +106,13 @@ public partial class MainWindow : Window
         if (_settings.ArmOnLaunch && MasterSwitch.IsChecked != true)
         {
             await ApplyAsync(turnOn: true);
+        }
+
+        // Last, and only if asked. Nothing about the window depends on it, so a slow or
+        // unreachable GitHub delays nothing the user can see.
+        if (_settings.CheckForUpdates)
+        {
+            await CheckForUpdatesAsync(announceResult: false);
         }
     }
 
@@ -698,6 +707,192 @@ public partial class MainWindow : Window
         GetArtButton.Visibility = LibraryItems.Items.OfType<GameTile>().Any(t => !t.HasCover)
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    // ---------------------------------------------------------------- updates
+
+    /// <summary>The running build, as the assembly records it.</summary>
+    private static string RunningVersion =>
+        Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0";
+
+    /// <summary>
+    /// The startup check. Silent unless something is genuinely newer.
+    ///
+    /// <para>
+    /// Nothing here reports a failure. A machine that is offline, rate-limited, or behind a
+    /// proxy has no update problem, and a dialog at startup about a check nobody was waiting on
+    /// would be worse than the missing information.
+    /// </para>
+    /// </summary>
+    private async Task CheckForUpdatesAsync(bool announceResult)
+    {
+        if (announceResult)
+        {
+            UpdateStatus.Text = "checking…";
+        }
+
+        AvailableRelease? release;
+        try
+        {
+            release = await UpdateChecker.CheckAsync(RunningVersion, default);
+        }
+        catch (Exception)
+        {
+            release = null;
+        }
+
+        _update = release;
+
+        if (release is null)
+        {
+            UpdateCard.Visibility = Visibility.Collapsed;
+
+            if (announceResult)
+            {
+                // Only ever said in response to a press. Deliberately not distinguishing "up to
+                // date" from "could not reach GitHub" would be dishonest, so it says both.
+                UpdateStatus.Text = $"nothing newer than {ShortVersion()} was found";
+            }
+
+            return;
+        }
+
+        UpdateHeadline.Text = release.Title;
+
+        UpdateDetail.Text = release.CanDownload
+            ? $"You are running {ShortVersion()}. The download is checked against the fingerprint "
+              + "GitHub published before anything is run, and installing it is still your decision."
+            : $"You are running {ShortVersion()}. This release published no verifiable installer, "
+              + "so the release page is the way to get it.";
+
+        UpdateDownloadButton.Visibility = release.CanDownload ? Visibility.Visible : Visibility.Collapsed;
+        UpdateFingerprint.Visibility = Visibility.Collapsed;
+        UpdateCard.Visibility = Visibility.Visible;
+
+        if (announceResult)
+        {
+            UpdateStatus.Text = $"{release.Version} is available — see the Dashboard";
+        }
+
+        _sounds.Play(UiSound.Confirm);
+    }
+
+    private static string ShortVersion() =>
+        ReleaseVersion.TryParse(RunningVersion, out var v) ? v.ToString() : RunningVersion;
+
+    private async void Update_CheckNow(object sender, RoutedEventArgs e)
+    {
+        Tick();
+        CheckNowButton.IsEnabled = false;
+
+        try
+        {
+            await CheckForUpdatesAsync(announceResult: true);
+        }
+        finally
+        {
+            CheckNowButton.IsEnabled = true;
+        }
+    }
+
+    private void Update_Notes(object sender, RoutedEventArgs e)
+    {
+        if (_update is { } release)
+        {
+            Tick();
+            OpenExternal(release.PageUrl);
+        }
+    }
+
+    /// <summary>
+    /// Downloads the installer, verifies it, and hands it over.
+    ///
+    /// <para>
+    /// Deliberately stops short of running it. A program that fetches an executable from the
+    /// internet and runs it is one compromised account away from installing an attacker's
+    /// software on every machine that has it — so the elevation prompt and the installer's own
+    /// "here is what this does" dialog both still happen, with a human in front of them.
+    /// </para>
+    /// </summary>
+    private async void Update_Download(object sender, RoutedEventArgs e)
+    {
+        if (_update is not { CanDownload: true } release)
+        {
+            return;
+        }
+
+        Tick();
+        UpdateDownloadButton.IsEnabled = false;
+        var restore = (string)UpdateDownloadButton.Content;
+
+        var progress = new Progress<double>(fraction =>
+            UpdateDownloadButton.Content = $"{fraction * 100:0}%");
+
+        try
+        {
+            var result = await UpdateChecker.DownloadAsync(release, progress, default);
+
+            if (!result.Verified)
+            {
+                _sounds.Play(UiSound.Alert);
+                UpdateDetail.Text = result.Problem ?? "The download could not be verified.";
+                UpdateDetail.Foreground = (Brush)FindResource("Crit");
+                return;
+            }
+
+            _sounds.Play(UiSound.Confirm);
+
+            UpdateDetail.Text =
+                $"Downloaded and verified against GitHub's published fingerprint. Running it will "
+                + "ask for administrator rights and show you what it changes before doing anything.";
+
+            UpdateFingerprint.Text = "sha256  " + result.ActualSha256;
+            UpdateFingerprint.Visibility = Visibility.Visible;
+
+            var run = MessageBox.Show(
+                $"{release.InstallerName} was downloaded and its fingerprint matches the one "
+                + "GitHub published for it.\n\n"
+                + $"sha256\n{result.ActualSha256}\n\n"
+                + "Run the installer now? GamerGod will close first — an installer cannot "
+                + "replace files that are in use.\n\n"
+                + "Nothing on your machine has been changed yet.",
+                "GamerGod",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (run != MessageBoxResult.Yes)
+            {
+                UpdateDownloadButton.Content = "SHOW FILE";
+                UpdateDownloadButton.Click -= Update_Download;
+                UpdateDownloadButton.Click += (_, _) => OpenExternal(
+                    System.IO.Path.GetDirectoryName(result.Path!) ?? result.Path!);
+                return;
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(result.Path!)
+            {
+                UseShellExecute = true,
+            });
+
+            Close();
+        }
+        catch (Exception ex)
+        {
+            _sounds.Play(UiSound.Alert);
+            UpdateDetail.Text = ex.Message;
+            UpdateDetail.Foreground = (Brush)FindResource("Crit");
+        }
+        finally
+        {
+            UpdateDownloadButton.IsEnabled = true;
+
+            if ((string)UpdateDownloadButton.Content is not ("SHOW FILE" or "DOWNLOAD"))
+            {
+                UpdateDownloadButton.Content = restore;
+            }
+        }
     }
 
     // ---------------------------------------------------------------- apps
@@ -1464,6 +1659,7 @@ public partial class MainWindow : Window
         OptConfirm.IsChecked = _settings.ConfirmBeforeApplying;
         OptArmOnLaunch.IsChecked = _settings.ArmOnLaunch;
         OptCoverArt.IsChecked = _settings.FetchCoverArt;
+        OptUpdates.IsChecked = _settings.CheckForUpdates;
 
         UpdateLibraryBlurb();
     }
@@ -1485,6 +1681,7 @@ public partial class MainWindow : Window
             ConfirmBeforeApplying = OptConfirm.IsChecked == true,
             ArmOnLaunch = OptArmOnLaunch.IsChecked == true,
             FetchCoverArt = OptCoverArt.IsChecked == true,
+            CheckForUpdates = OptUpdates.IsChecked == true,
         };
 
         _settings.Save();
