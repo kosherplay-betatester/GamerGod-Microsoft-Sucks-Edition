@@ -10,7 +10,7 @@
 ;   2. iscc install\gamergod.iss
 
 #define AppName "GamerGod"
-#define AppVersion "1.4.0"
+#define AppVersion "1.4.1"
 #define AppPublisher "GamerGod contributors"
 #define AppUrl "https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition"
 #define CliExe "gamergod.exe"

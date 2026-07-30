@@ -103,6 +103,7 @@ public partial class MainWindow : Window
 
         UpdateMaximiseGlyph();
         StateChanged += (_, _) => UpdateMaximiseGlyph();
+        DescribeRights();
 
         ApplySettingsToControls();
 
@@ -306,6 +307,37 @@ public partial class MainWindow : Window
             MasterSwitch.IsEnabled = true;
             await RefreshStateAsync();
         }
+    }
+
+    /// <summary>
+    /// States which mode this window is in, next to the switch.
+    ///
+    /// <para>
+    /// Whether a permission prompt appears depends on how the application was started, and that
+    /// is invisible from inside it — a window launched from an elevated shell inherits
+    /// administrator and needs no prompt, while the same build started normally does. Without
+    /// this line the prompt looks arbitrary, and its absence looks like the feature is broken.
+    /// </para>
+    /// </summary>
+    private void DescribeRights()
+    {
+        if (Elevation.IsElevated)
+        {
+            RightsLabel.Text = "running as administrator";
+            RightsLabel.Foreground = (Brush)FindResource("InkFaint");
+            return;
+        }
+
+        if (Elevation.FindCommandLineTool() is null)
+        {
+            // Arming cannot work at all in this state, and saying so now beats failing later.
+            RightsLabel.Text = "gamergod.exe missing — reinstall";
+            RightsLabel.Foreground = (Brush)FindResource("Crit");
+            return;
+        }
+
+        RightsLabel.Text = "Windows will ask permission";
+        RightsLabel.Foreground = (Brush)FindResource("InkFaint");
     }
 
     /// <summary>

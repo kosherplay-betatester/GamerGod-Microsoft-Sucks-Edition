@@ -34,7 +34,7 @@ $signal = [System.Drawing.Color]::FromArgb(255, 255, 180, 84)
 $signalLit = [System.Drawing.Color]::FromArgb(255, 255, 201, 120)
 $signalDeep = [System.Drawing.Color]::FromArgb(255, 224, 154, 60)
 $edge = [System.Drawing.Color]::FromArgb(255, 138, 100, 40)
-$ghost = [System.Drawing.Color]::FromArgb(205, 154, 112, 48)
+$ghost = [System.Drawing.Color]::FromArgb(255, 176, 116, 44)
 
 function New-RoundedPath {
     param([System.Drawing.RectangleF] $Box, [float] $Radius)
@@ -98,39 +98,42 @@ function New-Frame {
     # rather than on the letter looks off by a pixel at small sizes - exactly where it shows.
     $rise = $Size * 0.035
 
-    # Below 32 pixels the pair has about six pixels of glyph each to work with, and two
+    # Below 40 pixels the pair has about six pixels of glyph each to work with, and two
     # overlapping G's at that scale are indistinguishable from a smudge. The taskbar and the
     # window chrome get the single G instead - the same simplification any mark this dense
     # needs, and the reason to draw the icon in code rather than scale one bitmap down.
-    $stacked = $Size -ge 32
-    $em = if ($stacked) { $Size * 0.42 } else { $Size * 0.62 }
+    $stacked = $Size -ge 40
+    $em = if ($stacked) { $Size * 0.47 } else { $Size * 0.62 }
 
     if ($stacked) {
-        # Rear G: high and left, hollow, so it recedes behind the front one. The offsets are
-        # kept tight; pushed further apart the pair stops reading as one mark and starts
-        # reading as two letters that drifted.
+        # Rear G: high and left, and SOLID.
+        #
+        # It was a thin hollow outline, which is why the mark did not read as two letters - at
+        # any size below 128 the stroke thinned into noise behind the front glyph and what
+        # survived looked like a single G with a smudge. Filled in a dimmer amber it stays
+        # clearly a G while still sitting behind, because depth here comes from brightness and
+        # overlap rather than from weight.
         $rear = New-Object System.Drawing.Drawing2D.GraphicsPath
         $rear.AddString('G', $family, $bold, $em,
-            (New-Object System.Drawing.PointF(($Size * 0.405), (($Size * 0.395) - $rise))), $format)
+            (New-Object System.Drawing.PointF(($Size * 0.395), (($Size * 0.400) - $rise))), $format)
 
-        $ghostPen = New-Object System.Drawing.Pen($ghost, [math]::Max(1.0, $Size * 0.036))
-        $ghostPen.LineJoin = 'Round'
-        $g.DrawPath($ghostPen, $rear)
-        $ghostPen.Dispose()
+        $rearFill = New-Object System.Drawing.SolidBrush($ghost)
+        $g.FillPath($rearFill, $rear)
+        $rearFill.Dispose()
         $rear.Dispose()
     }
 
     # Front G: low and right when stacked, dead centre when not. Solid, on its own vertical
     # gradient so it reads as lit rather than flat, and outlined in the ground colour first -
     # which is what keeps the two legible where they overlap.
-    $frontX = if ($stacked) { $Size * 0.605 } else { $Size * 0.5 }
-    $frontY = if ($stacked) { $Size * 0.615 } else { $Size * 0.5 }
+    $frontX = if ($stacked) { $Size * 0.615 } else { $Size * 0.5 }
+    $frontY = if ($stacked) { $Size * 0.620 } else { $Size * 0.5 }
 
     $front = New-Object System.Drawing.Drawing2D.GraphicsPath
     $front.AddString('G', $family, $bold, $em,
         (New-Object System.Drawing.PointF($frontX, ($frontY - $rise))), $format)
 
-    $cutPen = New-Object System.Drawing.Pen($ground, [math]::Max(1.5, $Size * 0.07))
+    $cutPen = New-Object System.Drawing.Pen($ground, [math]::Max(2.0, $Size * 0.085))
     $cutPen.LineJoin = 'Round'
     $g.DrawPath($cutPen, $front)
 

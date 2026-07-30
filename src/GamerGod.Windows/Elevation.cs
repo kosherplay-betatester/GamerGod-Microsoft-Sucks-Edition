@@ -92,12 +92,18 @@ public static class Elevation
         try
         {
             var self = Environment.ProcessPath is { } path ? Path.GetFullPath(path) : null;
-            var here = AppContext.BaseDirectory;
+
+            // AppContext.BaseDirectory ends with a separator, and Directory.GetParent of a path
+            // ending in one returns that same directory rather than its parent. Left untrimmed,
+            // both candidates below resolve to this application's own folder, both are skipped
+            // as self, and the tool reports itself missing on a perfectly good installation.
+            var here = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
+            var parent = Directory.GetParent(here)?.FullName ?? here;
 
             foreach (var candidate in new[]
                      {
                          // The installed layout: the tool sits one level above the app folder.
-                         Path.Combine(Directory.GetParent(here)?.FullName ?? here, "gamergod.exe"),
+                         Path.Combine(parent, "gamergod.exe"),
                          Path.Combine(here, "gamergod.exe"),
                      })
             {
