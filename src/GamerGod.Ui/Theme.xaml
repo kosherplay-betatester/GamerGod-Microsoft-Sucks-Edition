@@ -345,6 +345,119 @@
          on/off tones.
     -->
     <!--
+        A free game. Landscape because that is the shape the catalogue publishes its key art in
+        — 365x206 — and cropping every image into a portrait frame to match the owned-games grid
+        would throw away most of each one to enforce a consistency nobody asked for.
+    -->
+    <Style x:Key="FreeGameTileButton" TargetType="Button">
+        <Setter Property="Width" Value="248" />
+        <Setter Property="Height" Value="212" />
+        <Setter Property="Margin" Value="0,0,14,14" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Root" Margin="0,3,0,0">
+                        <Border x:Name="Frame" CornerRadius="5" ClipToBounds="True"
+                                Background="#D912161E"
+                                BorderBrush="{StaticResource Line}" BorderThickness="1">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="3"
+                                                  Direction="270" Opacity="0.45" />
+                            </Border.Effect>
+
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="132" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0" Background="{Binding Fallback}">
+                                    <TextBlock Text="{Binding Initial}"
+                                               FontFamily="{StaticResource Display}"
+                                               FontSize="44" FontWeight="Bold"
+                                               Foreground="#26FFFFFF"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+
+                                    <Image x:Name="Art" Source="{Binding Art}"
+                                           Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+
+                                    <Border VerticalAlignment="Bottom" Height="44">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#0012161E" Offset="0" />
+                                                <GradientStop Color="#D912161E" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+
+                                    <Border x:Name="FreeChip" HorizontalAlignment="Left"
+                                            VerticalAlignment="Top" Margin="9"
+                                            Padding="7,2,7,3" CornerRadius="2"
+                                            Background="{StaticResource Signal}">
+                                        <TextBlock Text="FREE"
+                                                   FontFamily="{StaticResource Display}"
+                                                   FontSize="9" FontWeight="Bold"
+                                                   Foreground="#0A0C11" />
+                                    </Border>
+                                </Grid>
+
+                                <StackPanel Grid.Row="1" Margin="12,9,12,0">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontFamily="{StaticResource Display}"
+                                               FontSize="13.5" FontWeight="SemiBold"
+                                               Foreground="{StaticResource Ink}"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                        <TextBlock Text="{Binding Genre}"
+                                                   FontFamily="{StaticResource Display}"
+                                                   FontSize="9"
+                                                   Foreground="{StaticResource InkFaint}" />
+                                        <TextBlock Text="{Binding Released}"
+                                                   FontFamily="{StaticResource Data}"
+                                                   FontSize="9.5" Margin="9,0,0,0"
+                                                   Foreground="{StaticResource InkFaint}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="Glow" CornerRadius="5" BorderThickness="1"
+                                BorderBrush="{StaticResource Signal}" Opacity="0"
+                                IsHitTestVisible="False"
+                                Effect="{StaticResource SignalHalo}" />
+                    </Grid>
+
+                    <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding HasArt}" Value="False">
+                            <Setter TargetName="Art" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Glow" Property="Opacity" Value="1" />
+                            <Setter TargetName="Root" Property="Margin" Value="0,0,0,3" />
+                        </Trigger>
+
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Glow" Property="Opacity" Value="1" />
+                        </Trigger>
+
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Root" Property="Margin" Value="0,5,0,0" />
+                            <Setter TargetName="Frame" Property="Opacity" Value="0.85" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         A program, not a game. Landscape rather than 2:3 because the artwork here is a 32- or
         48-pixel application icon: stretching that into a portrait poster would look like a
         mistake, while a wide card with the icon at native size looks like a shelf.

@@ -13,6 +13,7 @@ using System.Windows.Media.Imaging;
 using GamerGod.Core.Catalogue;
 using GamerGod.Core.Diagnostics;
 using GamerGod.Core.Engine;
+using GamerGod.Core.FreeGames;
 using GamerGod.Core.Hardware;
 using GamerGod.Core.Ledger;
 using GamerGod.Core.Library;
@@ -38,6 +39,9 @@ public partial class MainWindow : Window
     private bool _catalogueLoaded;
     private GameTile? _selected;
     private AvailableRelease? _update;
+    private ImmutableArray<FreeGame> _freeGames = [];
+    private FreeGameSort _freeSort = FreeGameSort.Popularity;
+    private bool _freeLoaded;
 
     /// <summary>Catalogue row icons, by entry id, so installed programs can upgrade in place.</summary>
     private readonly Dictionary<string, Image> _catalogueIcons = [];
@@ -707,6 +711,224 @@ public partial class MainWindow : Window
         GetArtButton.Visibility = LibraryItems.Items.OfType<GameTile>().Any(t => !t.HasCover)
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    // ---------------------------------------------------------------- free games
+
+    /// <summary>
+    /// Opens the page with whatever was last fetched, then asks before going online.
+    ///
+    /// <para>
+    /// Both halves matter. Showing the cached list first means the page is useful immediately
+    /// rather than gated behind a prompt, and asking before refreshing is what Charter Article
+    /// IV requires of an outbound connection — which is also exactly how it was requested.
+    /// </para>
+    /// </summary>
+    private async Task LoadFreeGamesAsync(bool promptToRefresh)
+    {
+        var cached = FreeGameSource.LoadCached();
+        _freeGames = cached.Games;
+
+        RenderFreeGames();
+
+        if (!promptToRefresh)
+        {
+            return;
+        }
+
+        var age = cached.RetrievedUtc is { } when
+            ? DescribeAge(DateTimeOffset.UtcNow - when)
+            : null;
+
+        var question = _freeGames.IsEmpty
+            ? "Look for free games now?\n\n"
+              + "GamerGod will ask a public games catalogue for its current list. It needs no "
+              + "account and sends nothing about you or your machine — just a request for the "
+              + "list, and one for each game's artwork.\n\n"
+              + "No game is downloaded. Each entry opens that game's page so you can get it "
+              + "from the publisher yourself."
+            : $"You have {_freeGames.Length} free games from {age}.\n\n"
+              + "Check the catalogue for new ones? It needs no account and sends nothing about "
+              + "you or your machine.";
+
+        if (MessageBox.Show(question, "GamerGod", MessageBoxButton.YesNo, MessageBoxImage.Question)
+            != MessageBoxResult.Yes)
+        {
+            if (_freeGames.IsEmpty)
+            {
+                FreeEmpty.Text =
+                    "Nothing fetched yet. Press Find free games whenever you want the list — "
+                    + "GamerGod will not go looking on its own.";
+                FreeEmpty.Visibility = Visibility.Visible;
+            }
+
+            return;
+        }
+
+        await RefreshFreeGamesAsync();
+    }
+
+    private static string DescribeAge(TimeSpan age) => age.TotalMinutes switch
+    {
+        < 2 => "a moment ago",
+        < 60 => $"{(int)age.TotalMinutes} minutes ago",
+        < 48 * 60 => $"{(int)age.TotalHours} hours ago",
+        _ => $"{(int)age.TotalDays} days ago",
+    };
+
+    private async Task RefreshFreeGamesAsync()
+    {
+        FreeRefresh.IsEnabled = false;
+        FreeCount.Text = "asking the catalogue…";
+
+        try
+        {
+            var result = await FreeGameSource.RefreshAsync(default);
+
+            if (result.Problem is { } problem)
+            {
+                _sounds.Play(UiSound.Alert);
+
+                // Says which of the two happened rather than blaming the network for a shape
+                // change, or the other way round.
+                FreeCount.Text = result.Games.IsEmpty
+                    ? $"could not fetch the list: {problem}"
+                    : $"could not refresh ({problem}) — showing the last list";
+            }
+
+            _freeGames = result.Games;
+            RenderFreeGames();
+
+            if (result.Problem is null)
+            {
+                _sounds.Play(UiSound.Confirm);
+            }
+
+            await LoadFreeArtAsync();
+        }
+        finally
+        {
+            FreeRefresh.IsEnabled = true;
+        }
+    }
+
+    private void RenderFreeGames()
+    {
+        FreeItems.Items.Clear();
+        FreeEmpty.Visibility = Visibility.Collapsed;
+        FreeSortButton.Content = "SORT: " + FreeGameFeed.Describe(_freeSort);
+
+        foreach (var game in FreeGameFeed.Sort(_freeGames, _freeSort))
+        {
+            FreeItems.Items.Add(FreeGameTile.From(game));
+        }
+
+        if (_freeGames.IsEmpty)
+        {
+            return;
+        }
+
+        var genres = _freeGames.Select(g => g.Genre).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+        FreeCount.Text = $"{_freeGames.Length} free games  ·  {genres} genres";
+    }
+
+    /// <summary>
+    /// Fills in key art, sequentially, updating each tile as it arrives.
+    ///
+    /// <para>
+    /// Sequential on purpose: several hundred parallel image requests would saturate a
+    /// connection somebody may be gaming on, and the grid filling in visibly reads better than
+    /// a frozen page followed by everything at once.
+    /// </para>
+    /// </summary>
+    private async Task LoadFreeArtAsync()
+    {
+        var tiles = FreeItems.Items.OfType<FreeGameTile>().ToImmutableArray();
+
+        if (tiles.IsEmpty)
+        {
+            return;
+        }
+
+        var restore = FreeCount.Text;
+        var loaded = 0;
+
+        foreach (var tile in tiles)
+        {
+            if (await tile.TryLoadArtAsync(default))
+            {
+                loaded++;
+
+                if (loaded % 12 == 0)
+                {
+                    FreeCount.Text = $"{restore}  ·  loading art {loaded}/{tiles.Length}";
+                }
+            }
+        }
+
+        FreeCount.Text = restore;
+    }
+
+    private async void Free_Refresh(object sender, RoutedEventArgs e)
+    {
+        Tick();
+
+        if (MessageBox.Show(
+                "Ask the catalogue for its current list of free games?\n\n"
+                + "No account is used and nothing about you or your machine is sent. No game is "
+                + "downloaded — each entry opens its page so you can get it from the publisher.",
+                "GamerGod",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        await RefreshFreeGamesAsync();
+    }
+
+    /// <summary>
+    /// Cycles the ordering.
+    ///
+    /// <para>
+    /// A button rather than a dropdown because there are four of them and every one is one
+    /// press away — a combo box for four options is a menu built to look like a setting.
+    /// </para>
+    /// </summary>
+    private async void Free_CycleSort(object sender, RoutedEventArgs e)
+    {
+        Tick();
+
+        _freeSort = _freeSort switch
+        {
+            FreeGameSort.Popularity => FreeGameSort.Newest,
+            FreeGameSort.Newest => FreeGameSort.Alphabetical,
+            FreeGameSort.Alphabetical => FreeGameSort.Genre,
+            _ => FreeGameSort.Popularity,
+        };
+
+        RenderFreeGames();
+
+        // Re-rendering rebuilds every tile, so art already on disk has to be re-attached.
+        await LoadFreeArtAsync();
+    }
+
+    private void Free_Open(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not FreeGameTile tile)
+        {
+            return;
+        }
+
+        Tick();
+
+        // Validated in Core before it ever reaches here, and again on the way out. This is a
+        // navigation built from a remote server's response.
+        if (FreeGameFeed.IsCataloguePage(tile.Game.PageUrl))
+        {
+            OpenExternal(tile.Game.PageUrl);
+        }
     }
 
     // ---------------------------------------------------------------- updates
@@ -1746,6 +1968,7 @@ public partial class MainWindow : Window
 
         Show(PageDashboard, page == "Dashboard");
         Show(PageLibrary, page == "Library");
+        Show(PageFree, page == "Free");
         Show(PageInstalled, page == "Installed");
         Show(PageGetMore, page == "GetMore");
         Show(PageMachine, page == "Machine");
@@ -1766,6 +1989,14 @@ public partial class MainWindow : Window
         {
             _catalogueLoaded = true;
             _ = LoadCatalogueAsync();
+        }
+
+        // Asks before going online, once per session. Pressing Find free games is how you ask
+        // again — the prompt is not repeated every time the tab is opened.
+        if (page == "Free" && !_freeLoaded)
+        {
+            _freeLoaded = true;
+            _ = LoadFreeGamesAsync(promptToRefresh: true);
         }
 
         // Rescanned every visit rather than cached: something installed on the Get more page

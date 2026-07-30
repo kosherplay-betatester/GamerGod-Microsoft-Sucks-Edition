@@ -168,6 +168,9 @@
                             <RadioButton x:Name="NavLibrary" Style="{StaticResource NavButton}"
                                          Content="Library"
                                          Checked="Nav_Changed" Tag="Library" />
+                            <RadioButton x:Name="NavFree" Style="{StaticResource NavButton}"
+                                         Content="Free games"
+                                         Checked="Nav_Changed" Tag="Free" />
                             <RadioButton x:Name="NavInstalled" Style="{StaticResource NavButton}"
                                          Content="Apps"
                                          Checked="Nav_Changed" Tag="Installed" />
@@ -427,6 +430,59 @@
                             </Grid>
                         </Border>
                     </Grid>
+
+                    <!-- ============ Free games ============ -->
+                    <ScrollViewer x:Name="PageFree" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="26,22,26,26" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Eyebrow}" Text="COSTS NOTHING" />
+                            <TextBlock Style="{StaticResource H1}" Text="Free games" />
+                            <TextBlock Style="{StaticResource BodyText}" Margin="0,7,0,0"
+                                       Text="Free-to-play and permanently-free PC titles, from a public catalogue that needs no account. GamerGod hosts nothing and downloads no game — each tile opens that game's page, and getting it happens at the publisher's own store. The list is only fetched when you ask for it." />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                <Button x:Name="FreeRefresh" Style="{StaticResource GhostButton}"
+                                        Content="FIND FREE GAMES" Click="Free_Refresh" />
+
+                                <Button x:Name="FreeSortButton" Style="{StaticResource GhostButton}"
+                                        Content="SORT: POPULAR" Margin="8,0,0,0"
+                                        Click="Free_CycleSort" />
+
+                                <TextBlock x:Name="FreeCount" Style="{StaticResource Mono}"
+                                           VerticalAlignment="Center" Margin="14,0,0,0" />
+                            </StackPanel>
+
+                            <ItemsControl x:Name="FreeItems" Margin="0,18,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource FreeGameTileButton}"
+                                                Click="Free_Open"
+                                                Tag="{Binding}"
+                                                ToolTip="{Binding Summary}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock x:Name="FreeEmpty" Style="{StaticResource BodyText}"
+                                       Margin="0,18,0,0" Visibility="Collapsed" />
+
+                            <Border Style="{StaticResource Card}" Margin="0,18,0,0"
+                                    Background="{StaticResource Raised}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Eyebrow}" Text="ABOUT THESE SORTS" />
+                                    <TextBlock Style="{StaticResource BodyText}"
+                                               Text="Popular is the catalogue's own ranking — it is a position in a list, not a download count, because no free-game catalogue publishes one. Download numbers and file sizes are not available: size appears only on an individual game's page, as a minimum storage requirement rather than a download size, so sorting several hundred games by it would mean several hundred requests for a number that does not mean what it looks like. GamerGod would rather offer four orderings that are real than six where two are invented." />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
 
                     <!-- ============ Apps ============ -->
                     <ScrollViewer x:Name="PageInstalled" VerticalScrollBarVisibility="Auto"
