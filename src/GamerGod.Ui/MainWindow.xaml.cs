@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -80,6 +81,12 @@ public partial class MainWindow : Window
         // Indexed by the minute so it changes between launches without needing a random source,
         // which the rest of this codebase deliberately avoids.
         Quip.Text = "— " + Quips[(int)(DateTime.Now.Ticks / TimeSpan.TicksPerMinute % Quips.Length)];
+
+        VersionLabel.Text = "v" + (System.Reflection.Assembly
+            .GetExecutingAssembly()
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion
+            .Split('+')[0] ?? "unknown");
 
         UpdateMaximiseGlyph();
         StateChanged += (_, _) => UpdateMaximiseGlyph();

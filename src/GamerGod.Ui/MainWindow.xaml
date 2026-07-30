@@ -183,7 +183,10 @@
                         </StackPanel>
 
                         <StackPanel DockPanel.Dock="Bottom">
-                            <TextBlock Style="{StaticResource Mono}" Text="v1.0.0"
+                            <!-- Filled from the assembly, not typed here. Three hand-maintained
+                                 copies of a version number is three chances for the app to
+                                 claim it is a release it is not. -->
+                            <TextBlock x:Name="VersionLabel" Style="{StaticResource Mono}"
                                        Margin="13,0,0,4" />
                             <TextBlock Style="{StaticResource Mono}" Text="GPLv3 · no telemetry"
                                        FontSize="10.5" Foreground="{StaticResource InkFaint}"
