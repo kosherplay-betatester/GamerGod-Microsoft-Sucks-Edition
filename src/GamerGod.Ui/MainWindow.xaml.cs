@@ -20,6 +20,7 @@ using GamerGod.Core.Library;
 using GamerGod.Core.Mutations;
 using GamerGod.Core.Policy;
 using GamerGod.Core.Safety;
+using GamerGod.Core.Search;
 using GamerGod.Core.Updates;
 using GamerGod.Ui.Audio;
 using GamerGod.Ui.Library;
@@ -42,6 +43,12 @@ public partial class MainWindow : Window
     private ImmutableArray<FreeGame> _freeGames = [];
     private FreeGameSort _freeSort = FreeGameSort.Popularity;
     private bool _freeLoaded;
+    private ImmutableArray<GameTile> _libraryTiles = [];
+    private ImmutableArray<AppTile> _appTiles = [];
+    private string _catalogueSummary = string.Empty;
+
+    /// <summary>Catalogue headings with their rows, so a search can hide both together.</summary>
+    private readonly List<(TextBlock Heading, List<(CatalogueEntry Entry, Border Card)> Entries)> _catalogueGroups = [];
 
     /// <summary>Catalogue row icons, by entry id, so installed programs can upgrade in place.</summary>
     private readonly Dictionary<string, Image> _catalogueIcons = [];
@@ -301,12 +308,141 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Applies or reverts through the elevated command-line tool.
+    ///
+    /// <para>
+    /// Arming writes the revert journal, which lives in a directory only administrators may
+    /// write to, and sets scheduling state on processes owned by other accounts. This window has
+    /// neither right, and should not: everything else it does — the core map, the library, the
+    /// catalogue — needs none, so holding administrator for all of it to serve one switch would
+    /// be the wrong trade. The consent prompt appears at the moment the machine changes.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns true when the caller should stop, because the work was brokered and reported.
+    /// </para>
+    /// </summary>
+    private async Task<bool> BrokerAsync(bool turnOn)
+    {
+        if (Elevation.IsElevated)
+        {
+            return false;
+        }
+
+        var verb = turnOn ? "on" : "off";
+
+        // The preview setting has to keep its promise here too. The itemised list the in-process
+        // path shows needs rights this window does not have, so what is confirmed is the set of
+        // levers rather than the exact process count — stated as such, rather than quietly
+        // dropping a setting the user switched on.
+        if (turnOn && _settings.ConfirmBeforeApplying)
+        {
+            var levers = new List<string>();
+
+            if (_settings.ConfineToAmbientDomain)
+            {
+                levers.Add("  · move background apps off your game's cores");
+            }
+
+            if (_settings.DemoteToEfficiencyMode)
+            {
+                levers.Add("  · set background apps to efficiency mode");
+            }
+
+            if (_settings.SuppressBackgroundServices)
+            {
+                levers.Add("  · pause the search indexer and update checks");
+            }
+
+            if (_settings.ManagePowerScheme)
+            {
+                levers.Add("  · activate a copy of your power plan, tuned for performance");
+            }
+
+            var proceed = MessageBox.Show(
+                "Turning Game Mode on will:\n\n"
+                + string.Join("\n", levers)
+                + "\n\nAnti-cheat services, fan and thermal software, audio, input devices and "
+                + "system-critical processes are never touched.\n\n"
+                + "Windows will ask for permission first — the journal that restores your "
+                + "machine lives where only administrators can write.\n\n"
+                + "Apply these changes?",
+                "GamerGod",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+
+            if (proceed != MessageBoxResult.OK)
+            {
+                MasterSwitch.IsChecked = false;
+                ShowReceipt("Nothing was changed.", []);
+                return true;
+            }
+        }
+
+        var result = await Elevation.RunAsync(verb, default);
+
+        switch (result.Outcome)
+        {
+            case ElevationOutcome.Succeeded:
+                _sounds.Play(turnOn ? UiSound.Arm : UiSound.Disarm);
+
+                // Reported from the journal rather than from parsed console output — the
+                // resulting state is better evidence than the text describing it.
+                ShowReceipt(
+                    turnOn
+                        ? "Game Mode is on. Background work has been moved out of your games' way."
+                        : "Your machine is exactly as it was.",
+                    [$"ran      gamergod {verb}   (as administrator)"]);
+                break;
+
+            case ElevationOutcome.Declined:
+                // Not a failure. Saying so plainly is the difference between a user who
+                // understands what happened and one who thinks the application is broken.
+                MasterSwitch.IsChecked = !turnOn;
+                ShowReceipt(
+                    "Nothing was changed.",
+                    [
+                        "You closed the Windows permission prompt.",
+                        turnOn
+                            ? "Turning Game Mode on needs administrator rights, because it writes the"
+                            : "Turning Game Mode off needs administrator rights, because it rewrites the",
+                        "journal that restores your machine — a file other users must not be able to edit.",
+                    ]);
+                break;
+
+            case ElevationOutcome.ToolMissing:
+                _sounds.Play(UiSound.Alert);
+                ShowReceipt(
+                    "Nothing was changed.",
+                    [
+                        result.Problem ?? "gamergod.exe is missing.",
+                        "Reinstalling GamerGod puts it back.",
+                    ]);
+                break;
+
+            default:
+                _sounds.Play(UiSound.Alert);
+                ShowReceipt(
+                    "Nothing was changed.",
+                    [result.Problem ?? "the elevated command failed", "Rebooting undoes anything that did apply."]);
+                break;
+        }
+
+        return true;
+    }
+
     private async Task TurnOnAsync()
     {
         if (_topology is null)
         {
             _sounds.Play(UiSound.Alert);
             ShowReceipt("Cannot start.", ["This machine's processor layout could not be read."]);
+            return;
+        }
+
+        if (await BrokerAsync(turnOn: true))
+        {
             return;
         }
 
@@ -363,6 +499,11 @@ public partial class MainWindow : Window
 
     private async Task TurnOffAsync()
     {
+        if (await BrokerAsync(turnOn: false))
+        {
+            return;
+        }
+
         var report = await BuildLedger().RevertAsync();
 
         _sounds.Play(report.IsClean ? UiSound.Disarm : UiSound.Alert);
@@ -431,15 +572,56 @@ public partial class MainWindow : Window
             return;
         }
 
-        var titles = games.Count(g => g.Source != GameSource.Emulator);
-        var emulators = games.Length - titles;
+        // Kept whole so searching filters a list rather than re-scanning every store on each
+        // keystroke.
+        _libraryTiles = [.. games.Select(GameTile.From)];
 
-        LibraryCount.Text = $"{titles} game{(titles == 1 ? "" : "s")}, "
-                            + $"{emulators} emulator{(emulators == 1 ? "" : "s")}";
+        RenderLibrary();
+        UpdateLibraryBlurb();
 
-        if (games.IsEmpty)
+        // Only if the user has already said yes. The first fetch is always a button press.
+        if (_settings.FetchCoverArt)
+        {
+            await FetchMissingCoversAsync();
+        }
+    }
+
+    /// <summary>
+    /// Draws the library grid, filtered by whatever is in the search box.
+    ///
+    /// <para>
+    /// Search covers the source and the emulated systems as well as the title, so "steam" or
+    /// "gamecube" are both useful queries in a grid of box art.
+    /// </para>
+    /// </summary>
+    private void RenderLibrary()
+    {
+        var query = LibrarySearch?.Text ?? string.Empty;
+        var searching = !string.IsNullOrWhiteSpace(query);
+
+        ClearSelection();
+        LibraryItems.Items.Clear();
+        LibraryEmpty.Visibility = Visibility.Collapsed;
+
+        var matched = _libraryTiles
+            .Select(t => (Tile: t, Score: FuzzySearch.Best(query, t.Name, t.SourceLabel, t.Subtitle)))
+            .Where(x => !searching || x.Score is not null)
+            .ToList();
+
+        if (searching)
+        {
+            matched = [.. matched.OrderByDescending(x => x.Score!.Value)];
+        }
+
+        foreach (var (tile, _) in matched)
+        {
+            LibraryItems.Items.Add(tile);
+        }
+
+        if (_libraryTiles.IsEmpty)
         {
             // Honest rather than blank. An empty grid reads as a broken feature.
+            LibraryCount.Text = string.Empty;
             LibraryEmpty.Text =
                 "Nothing found. GamerGod looks for Steam, Epic and GOG titles through the "
                 + "manifests those stores keep on disk, and for emulators it already knows "
@@ -449,18 +631,25 @@ public partial class MainWindow : Window
             return;
         }
 
-        foreach (var game in games)
+        if (searching)
         {
-            LibraryItems.Items.Add(GameTile.From(game));
+            LibraryCount.Text = $"{matched.Count} of {_libraryTiles.Length} match “{query.Trim()}”";
+
+            if (matched.Count == 0)
+            {
+                LibraryEmpty.Text =
+                    $"Nothing matched “{query.Trim()}”, including allowing for misspellings.";
+                LibraryEmpty.Visibility = Visibility.Visible;
+            }
+
+            return;
         }
 
-        UpdateLibraryBlurb();
+        var titles = _libraryTiles.Count(t => !t.IsEmulator);
+        var emulators = _libraryTiles.Length - titles;
 
-        // Only if the user has already said yes. The first fetch is always a button press.
-        if (_settings.FetchCoverArt)
-        {
-            await FetchMissingCoversAsync();
-        }
+        LibraryCount.Text = $"{titles} game{(titles == 1 ? "" : "s")}, "
+                            + $"{emulators} emulator{(emulators == 1 ? "" : "s")}";
     }
 
     // ---- selection --------------------------------------------------------
@@ -713,6 +902,78 @@ public partial class MainWindow : Window
             : Visibility.Collapsed;
     }
 
+    // ---------------------------------------------------------------- search
+
+    /// <summary>
+    /// Escape clears whichever box has focus, from inside it.
+    ///
+    /// <para>
+    /// The only way out of a filtered list that does not require selecting text and deleting it,
+    /// and the reason the field draws an ESC hint rather than a clear button — a button that only
+    /// matters while typing is a button your hand is nowhere near.
+    /// </para>
+    /// </summary>
+    private void Search_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && sender is TextBox box && box.Text.Length > 0)
+        {
+            box.Clear();
+            e.Handled = true;
+        }
+    }
+
+    private void LibrarySearch_Changed(object sender, TextChangedEventArgs e) => RenderLibrary();
+
+    private async void FreeSearch_Changed(object sender, TextChangedEventArgs e)
+    {
+        RenderFreeGames();
+        await LoadFreeArtAsync();
+    }
+
+    private void InstalledSearch_Changed(object sender, TextChangedEventArgs e) => RenderInstalledApps();
+
+    /// <summary>
+    /// Filters the catalogue in place.
+    ///
+    /// <para>
+    /// Rows are hidden rather than rebuilt, because rebuilding would discard the installed state
+    /// and the real icons the page spent a second working out. Group headings follow their
+    /// contents — a heading with nothing under it reads as a section that failed to load.
+    /// </para>
+    /// </summary>
+    private void CatalogueSearch_Changed(object sender, TextChangedEventArgs e)
+    {
+        var query = CatalogueSearch.Text;
+        var shown = 0;
+
+        foreach (var (heading, entries) in _catalogueGroups)
+        {
+            var visible = 0;
+
+            foreach (var (entry, card) in entries)
+            {
+                var matches = FuzzySearch.Matches(
+                    query, entry.Name, entry.Systems, entry.Group, entry.Note);
+
+                card.Visibility = matches ? Visibility.Visible : Visibility.Collapsed;
+
+                if (matches)
+                {
+                    visible++;
+                }
+            }
+
+            heading.Visibility = visible > 0 ? Visibility.Visible : Visibility.Collapsed;
+            shown += visible;
+        }
+
+        CatalogueStatus.Text = string.IsNullOrWhiteSpace(query)
+            ? _catalogueSummary
+            : shown == 0
+                ? $"nothing matches “{query.Trim()}”"
+                : $"{shown} of {SoftwareCatalogue.All.Length} match “{query.Trim()}”";
+    }
+
     // ---------------------------------------------------------------- free games
 
     /// <summary>
@@ -818,13 +1079,45 @@ public partial class MainWindow : Window
         FreeEmpty.Visibility = Visibility.Collapsed;
         FreeSortButton.Content = "SORT: " + FreeGameFeed.Describe(_freeSort);
 
-        foreach (var game in FreeGameFeed.Sort(_freeGames, _freeSort))
+        var query = FreeSearch?.Text ?? string.Empty;
+        var searching = !string.IsNullOrWhiteSpace(query);
+
+        var matched = FreeGameFeed.Sort(_freeGames, _freeSort)
+            .Select(g => (Game: g, Score: FuzzySearch.Best(query, g.Title, g.Genre, g.Publisher)))
+            .Where(x => !searching || x.Score is not null)
+            .ToList();
+
+        // While searching, relevance replaces the chosen ordering — a sort that ignored the
+        // query would bury the one game somebody typed the name of.
+        if (searching)
+        {
+            matched = [.. matched.OrderByDescending(x => x.Score!.Value)];
+        }
+
+        foreach (var (game, _) in matched)
         {
             FreeItems.Items.Add(FreeGameTile.From(game));
         }
 
         if (_freeGames.IsEmpty)
         {
+            return;
+        }
+
+        if (searching)
+        {
+            FreeCount.Text = matched.Count == 0
+                ? $"none of {_freeGames.Length} match “{query.Trim()}”"
+                : $"{matched.Count} of {_freeGames.Length} match “{query.Trim()}”";
+
+            if (matched.Count == 0)
+            {
+                FreeEmpty.Text =
+                    $"Nothing matched “{query.Trim()}”, including allowing for misspellings. "
+                    + "Try fewer letters — searching also covers genre and publisher.";
+                FreeEmpty.Visibility = Visibility.Visible;
+            }
+
             return;
         }
 
@@ -1160,28 +1453,70 @@ public partial class MainWindow : Window
 
         // Launchers first, then emulators; alphabetical within each. A grid whose order changed
         // between visits would be unusable, and registry enumeration order is arbitrary.
-        foreach (var tile in tiles
-                     .OrderBy(t => t.Entry.Kind == CatalogueKind.Launcher ? 0 : 1)
-                     .ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+        _appTiles =
+        [
+            .. tiles
+                .OrderBy(t => t.Entry.Kind == CatalogueKind.Launcher ? 0 : 1)
+                .ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase),
+        ];
+
+        RenderInstalledApps();
+    }
+
+    private void RenderInstalledApps()
+    {
+        var query = InstalledSearch?.Text ?? string.Empty;
+        var searching = !string.IsNullOrWhiteSpace(query);
+
+        InstalledItems.Items.Clear();
+        InstalledEmpty.Visibility = Visibility.Collapsed;
+
+        var matched = _appTiles
+            .Select(t => (Tile: t, Score: FuzzySearch.Best(query, t.Name, t.Systems, t.KindLabel)))
+            .Where(x => !searching || x.Score is not null)
+            .ToList();
+
+        if (searching)
+        {
+            matched = [.. matched.OrderByDescending(x => x.Score!.Value)];
+        }
+
+        foreach (var (tile, _) in matched)
         {
             InstalledItems.Items.Add(tile);
         }
 
-        var launchers = tiles.Count(t => t.Entry.Kind == CatalogueKind.Launcher);
-        var emulators = tiles.Count - launchers;
-
-        InstalledCount.Text =
-            $"{launchers} launcher{(launchers == 1 ? "" : "s")}, "
-            + $"{emulators} emulator{(emulators == 1 ? "" : "s")}";
-
-        if (tiles.Count == 0)
+        if (_appTiles.IsEmpty)
         {
+            InstalledCount.Text = string.Empty;
             InstalledEmpty.Text =
                 "None of the launchers or emulators GamerGod knows about are installed here. "
                 + "Get more has the full list — everything installs through the Windows Package "
                 + "Manager, and anything installed there appears on this page.";
             InstalledEmpty.Visibility = Visibility.Visible;
+            return;
         }
+
+        if (searching)
+        {
+            InstalledCount.Text = $"{matched.Count} of {_appTiles.Length} match “{query.Trim()}”";
+
+            if (matched.Count == 0)
+            {
+                InstalledEmpty.Text =
+                    $"Nothing matched “{query.Trim()}”, including allowing for misspellings.";
+                InstalledEmpty.Visibility = Visibility.Visible;
+            }
+
+            return;
+        }
+
+        var launchers = _appTiles.Count(t => t.Entry.Kind == CatalogueKind.Launcher);
+        var emulators = _appTiles.Length - launchers;
+
+        InstalledCount.Text =
+            $"{launchers} launcher{(launchers == 1 ? "" : "s")}, "
+            + $"{emulators} emulator{(emulators == 1 ? "" : "s")}";
     }
 
     private void Installed_Rescan(object sender, RoutedEventArgs e)
@@ -1265,21 +1600,32 @@ public partial class MainWindow : Window
 
         var rows = new List<(CatalogueEntry Entry, Border Card, Button Action, Border Chip, TextBlock ChipText)>();
 
+        _catalogueGroups.Clear();
+
         foreach (var group in SoftwareCatalogue.AllGroups)
         {
-            CatalogueItems.Items.Add(new TextBlock
+            var heading = new TextBlock
             {
                 Style = (Style)FindResource("Eyebrow"),
                 Text = group.Title.ToUpperInvariant(),
                 Margin = new Thickness(0, 18, 0, 8),
-            });
+            };
+
+            CatalogueItems.Items.Add(heading);
+
+            var members = new List<(CatalogueEntry Entry, Border Card)>();
 
             foreach (var entry in group.Entries)
             {
                 var row = BuildCatalogueRow(entry);
                 CatalogueItems.Items.Add(row.Card);
                 rows.Add(row);
+                members.Add((entry, row.Card));
             }
+
+            // Held so searching can hide a heading along with everything under it — a heading
+            // above nothing reads as a section that failed to load.
+            _catalogueGroups.Add((heading, members));
         }
 
         if (!WingetPackageManager.IsAvailable)
@@ -1324,8 +1670,8 @@ public partial class MainWindow : Window
 
         var count = rows.Count(r => r.Entry.WingetId is { } id && installed.Contains(id));
 
-        CatalogueStatus.Text =
-            $"{SoftwareCatalogue.All.Length} listed  ·  {count} already installed";
+        _catalogueSummary = $"{SoftwareCatalogue.All.Length} listed  ·  {count} already installed";
+        CatalogueStatus.Text = _catalogueSummary;
 
         await FetchMissingAppIconsAsync();
     }

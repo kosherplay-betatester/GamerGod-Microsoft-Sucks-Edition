@@ -345,6 +345,85 @@
          on/off tones.
     -->
     <!--
+        The search field. Uses a watermark rather than a label so the row stays one line, and
+        the placeholder disappears the moment anything is typed rather than on focus — a hint
+        that vanishes before you type is a hint you cannot read while deciding what to type.
+    -->
+    <Style x:Key="SearchBox" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{StaticResource Body}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        <Setter Property="CaretBrush" Value="{StaticResource Signal}" />
+        <Setter Property="SelectionBrush" Value="{StaticResource SignalDim}" />
+        <Setter Property="Background" Value="{StaticResource Sunk}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Width" Value="248" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Chrome" CornerRadius="3"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="&#xE721;"
+                                       FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                       Foreground="{StaticResource InkFaint}"
+                                       VerticalAlignment="Center" Margin="10,0,8,0" />
+
+                            <Grid Grid.Column="1">
+                                <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}"
+                                           Foreground="{StaticResource InkFaint}"
+                                           FontSize="12.5" VerticalAlignment="Center"
+                                           IsHitTestVisible="False" />
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              VerticalAlignment="Center"
+                                              HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollBarVisibility="Hidden" />
+                            </Grid>
+
+                            <TextBlock Grid.Column="2" Text="ESC"
+                                       FontFamily="{StaticResource Data}" FontSize="9"
+                                       Foreground="{StaticResource InkFaint}"
+                                       VerticalAlignment="Center" Margin="0,0,10,0"
+                                       Opacity="0.6" />
+                        </Grid>
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush"
+                                    Value="{StaticResource LineSoft}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Chrome" Property="BorderBrush"
+                                    Value="{StaticResource Signal}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Text" Value="">
+                <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
         A free game. Landscape because that is the shape the catalogue publishes its key art in
         — 365x206 — and cropping every image into a portrait frame to match the owned-games grid
         would throw away most of each one to enforce a consistency nobody asked for.

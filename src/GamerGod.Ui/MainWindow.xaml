@@ -342,6 +342,10 @@
                                     <Button x:Name="GetArtButton" Style="{StaticResource GhostButton}"
                                             Content="GET ARTWORK" Margin="8,0,0,0"
                                             Click="GetArt_Click" />
+                                    <TextBox x:Name="LibrarySearch" Style="{StaticResource SearchBox}"
+                                             Margin="12,0,0,0" Tag="Search your games"
+                                             TextChanged="LibrarySearch_Changed"
+                                             PreviewKeyDown="Search_KeyDown" />
                                     <TextBlock x:Name="LibraryCount" Style="{StaticResource Mono}"
                                                VerticalAlignment="Center" Margin="14,0,0,0" />
                                 </StackPanel>
@@ -449,6 +453,11 @@
                                         Content="SORT: POPULAR" Margin="8,0,0,0"
                                         Click="Free_CycleSort" />
 
+                                <TextBox x:Name="FreeSearch" Style="{StaticResource SearchBox}"
+                                         Margin="12,0,0,0" Tag="Search 347 free games"
+                                         TextChanged="FreeSearch_Changed"
+                                         PreviewKeyDown="Search_KeyDown" />
+
                                 <TextBlock x:Name="FreeCount" Style="{StaticResource Mono}"
                                            VerticalAlignment="Center" Margin="14,0,0,0" />
                             </StackPanel>
@@ -497,6 +506,10 @@
                             <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                                 <Button Style="{StaticResource GhostButton}" Content="RESCAN"
                                         Click="Installed_Rescan" />
+                                <TextBox x:Name="InstalledSearch" Style="{StaticResource SearchBox}"
+                                         Margin="12,0,0,0" Tag="Search your apps"
+                                         TextChanged="InstalledSearch_Changed"
+                                         PreviewKeyDown="Search_KeyDown" />
                                 <TextBlock x:Name="InstalledCount" Style="{StaticResource Mono}"
                                            VerticalAlignment="Center" Margin="14,0,0,0" />
                             </StackPanel>
@@ -544,8 +557,14 @@
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock x:Name="CatalogueStatus" Style="{StaticResource Mono}"
-                                       Margin="0,16,0,0" />
+                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                <TextBox x:Name="CatalogueSearch" Style="{StaticResource SearchBox}"
+                                         Width="300" Tag="Search emulators and launchers"
+                                         TextChanged="CatalogueSearch_Changed"
+                                         PreviewKeyDown="Search_KeyDown" />
+                                <TextBlock x:Name="CatalogueStatus" Style="{StaticResource Mono}"
+                                           VerticalAlignment="Center" Margin="14,0,0,0" />
+                            </StackPanel>
 
                             <ItemsControl x:Name="CatalogueItems" Margin="0,4,0,0" />
                         </StackPanel>
