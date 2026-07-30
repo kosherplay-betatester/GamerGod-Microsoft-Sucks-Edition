@@ -6,6 +6,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using GamerGod.Core.Catalogue;
 using GamerGod.Core.Diagnostics;
 using GamerGod.Core.Engine;
 using GamerGod.Core.Hardware;
@@ -29,6 +31,7 @@ public partial class MainWindow : Window
     private CpuTopology? _topology;
     private bool _loading = true;
     private bool _libraryLoaded;
+    private bool _catalogueLoaded;
     private GameTile? _selected;
 
     public MainWindow()
@@ -44,8 +47,38 @@ public partial class MainWindow : Window
     private MutationLedger BuildLedger() =>
         new(new FileJournal(JournalPath), new AmbientResolver(_operations, _topology));
 
+    /// <summary>
+    /// The line next to the edition name. One is picked per launch.
+    ///
+    /// <para>
+    /// Every one of these is a fact about what this product actually does, told as a joke.
+    /// A gag that is also true is the only kind worth putting in a title bar — the alternative
+    /// is attitude with nothing behind it, which is what the rest of this category ships.
+    /// </para>
+    /// </summary>
+    private static readonly string[] Quips =
+    [
+        "your cores, your rules",
+        "it puts everything back",
+        "no drivers were harmed",
+        "we read the CPU, not your data",
+        "the reboot is the undo button",
+        "no telemetry, not even a little",
+        "111 background apps, politely relocated",
+        "measured, or not claimed",
+        "Task Manager could never",
+        "yes, it works with anti-cheat",
+    ];
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Indexed by the minute so it changes between launches without needing a random source,
+        // which the rest of this codebase deliberately avoids.
+        Quip.Text = "— " + Quips[(int)(DateTime.Now.Ticks / TimeSpan.TicksPerMinute % Quips.Length)];
+
+        UpdateMaximiseGlyph();
+        StateChanged += (_, _) => UpdateMaximiseGlyph();
+
         ApplySettingsToControls();
 
         _sounds.Enabled = _settings.SoundEnabled;
@@ -651,6 +684,348 @@ public partial class MainWindow : Window
             : Visibility.Collapsed;
     }
 
+    // ---------------------------------------------------------------- get more
+
+    /// <summary>
+    /// Builds the catalogue page, then fills in what is already installed once winget answers.
+    ///
+    /// <para>
+    /// Drawn before the lookup completes rather than after. The lookup takes about a second on
+    /// a real machine, and a page that appears blank for a second reads as broken — so every
+    /// row renders immediately with its state pending, and the chips resolve underneath.
+    /// </para>
+    /// </summary>
+    private async Task LoadCatalogueAsync()
+    {
+        CatalogueItems.Items.Clear();
+        SwitchNote.Text = SoftwareCatalogue.SwitchNote;
+
+        var rows = new List<(CatalogueEntry Entry, Border Card, Button Action, Border Chip, TextBlock ChipText)>();
+
+        foreach (var group in SoftwareCatalogue.Launchers.Concat(SoftwareCatalogue.Emulators))
+        {
+            CatalogueItems.Items.Add(new TextBlock
+            {
+                Style = (Style)FindResource("Eyebrow"),
+                Text = group.Title.ToUpperInvariant(),
+                Margin = new Thickness(0, 18, 0, 8),
+            });
+
+            foreach (var entry in group.Entries)
+            {
+                var row = BuildCatalogueRow(entry);
+                CatalogueItems.Items.Add(row.Card);
+                rows.Add(row);
+            }
+        }
+
+        if (!WingetPackageManager.IsAvailable)
+        {
+            // Stated once, plainly, rather than as a failure on every row.
+            CatalogueStatus.Text =
+                "The Windows Package Manager is not on this machine, so nothing here can be "
+                + "installed for you. Every entry still opens its official download page.";
+
+            foreach (var row in rows)
+            {
+                Present(row, CatalogueState.Unavailable);
+            }
+
+            return;
+        }
+
+        CatalogueStatus.Text = "checking what you already have…";
+
+        var ids = SoftwareCatalogue.All
+            .Select(e => e.WingetId)
+            .Where(id => id is not null)
+            .Select(id => id!)
+            .ToImmutableArray();
+
+        ImmutableHashSet<string> installed;
+        try
+        {
+            installed = await WingetPackageManager.InstalledIdsAsync(ids, default);
+        }
+        catch (Exception)
+        {
+            installed = [];
+        }
+
+        foreach (var row in rows)
+        {
+            Present(row, StateOf(row.Entry, installed));
+        }
+
+        var count = rows.Count(r => r.Entry.WingetId is { } id && installed.Contains(id));
+
+        CatalogueStatus.Text =
+            $"{SoftwareCatalogue.All.Length} listed  ·  {count} already installed";
+    }
+
+    private static CatalogueState StateOf(CatalogueEntry entry, ImmutableHashSet<string> installed) =>
+        entry.WingetId is not { } id ? CatalogueState.Unavailable
+        : installed.Contains(id) ? CatalogueState.Installed
+        : CatalogueState.NotInstalled;
+
+    private (CatalogueEntry Entry, Border Card, Button Action, Border Chip, TextBlock ChipText)
+        BuildCatalogueRow(CatalogueEntry entry)
+    {
+        var chipText = new TextBlock
+        {
+            FontFamily = (FontFamily)FindResource("Display"),
+            FontSize = 9.5,
+            Foreground = (Brush)FindResource("InkFaint"),
+            Text = "…",
+        };
+
+        var chip = new Border
+        {
+            Margin = new Thickness(0, 0, 10, 0),
+            Padding = new Thickness(7, 2, 7, 3),
+            CornerRadius = new CornerRadius(2),
+            BorderBrush = (Brush)FindResource("LineSoft"),
+            BorderThickness = new Thickness(1),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = chipText,
+        };
+
+        var head = new StackPanel { Orientation = Orientation.Horizontal };
+        head.Children.Add(chip);
+        head.Children.Add(new TextBlock
+        {
+            Text = entry.Name,
+            Style = (Style)FindResource("H2"),
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        var body = new StackPanel();
+        body.Children.Add(head);
+        body.Children.Add(new TextBlock
+        {
+            Text = entry.Systems,
+            Style = (Style)FindResource("BodyText"),
+            FontSize = 12.5,
+            Margin = new Thickness(0, 6, 0, 0),
+        });
+
+        if (entry.Note is { } note)
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = "→ " + note,
+                Style = (Style)FindResource("BodyText"),
+                FontSize = 12,
+                Foreground = (Brush)FindResource("Warn"),
+                Margin = new Thickness(0, 6, 0, 0),
+            });
+        }
+
+        var action = new Button
+        {
+            Style = (Style)FindResource("GhostButton"),
+            VerticalAlignment = VerticalAlignment.Center,
+            MinWidth = 104,
+            Tag = entry,
+            Content = "…",
+        };
+
+        action.Click += Catalogue_Action;
+
+        var site = new Button
+        {
+            Style = (Style)FindResource("GhostButton"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+            Content = "SITE",
+            Tag = entry,
+            ToolTip = entry.Homepage,
+        };
+
+        site.Click += Catalogue_OpenSite;
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        body.Margin = new Thickness(0, 0, 16, 0);
+        Grid.SetColumn(body, 0);
+        grid.Children.Add(body);
+
+        var actions = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        actions.Children.Add(site);
+        actions.Children.Add(action);
+        Grid.SetColumn(actions, 1);
+        grid.Children.Add(actions);
+
+        var card = new Border
+        {
+            Style = (Style)FindResource("Card"),
+            Margin = new Thickness(0, 0, 0, 8),
+            Padding = new Thickness(14),
+            Child = grid,
+        };
+
+        return (entry, card, action, chip, chipText);
+    }
+
+    private void Present(
+        (CatalogueEntry Entry, Border Card, Button Action, Border Chip, TextBlock ChipText) row,
+        CatalogueState state)
+    {
+        switch (state)
+        {
+            case CatalogueState.Installed:
+                row.ChipText.Text = "INSTALLED";
+                row.ChipText.Foreground = (Brush)FindResource("Good");
+                row.Chip.BorderBrush = (Brush)FindResource("Good");
+                row.Action.Content = "REMOVE";
+                row.Action.IsEnabled = true;
+                break;
+
+            case CatalogueState.NotInstalled:
+                row.ChipText.Text = "AVAILABLE";
+                row.ChipText.Foreground = (Brush)FindResource("InkFaint");
+                row.Chip.BorderBrush = (Brush)FindResource("LineSoft");
+                row.Action.Content = "INSTALL";
+                row.Action.IsEnabled = true;
+                break;
+
+            case CatalogueState.Unavailable:
+                // Not a failure. Several of the best emulators only publish from their own
+                // site, and the button says which situation this is rather than pretending.
+                row.ChipText.Text = "MANUAL";
+                row.ChipText.Foreground = (Brush)FindResource("InkFaint");
+                row.Chip.BorderBrush = (Brush)FindResource("LineSoft");
+                row.Action.Content = "GET IT";
+                row.Action.IsEnabled = true;
+                break;
+
+            default:
+                row.ChipText.Text = "…";
+                row.Action.Content = "…";
+                row.Action.IsEnabled = false;
+                break;
+        }
+
+        row.Card.BorderBrush = (Brush)FindResource(
+            state == CatalogueState.Installed ? "LineSoft" : "Line");
+    }
+
+    private void Catalogue_OpenSite(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is CatalogueEntry entry)
+        {
+            Tick();
+            OpenExternal(entry.Homepage);
+        }
+    }
+
+    private async void Catalogue_Action(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not CatalogueEntry entry)
+        {
+            return;
+        }
+
+        Tick();
+
+        if (entry.WingetId is not { } wingetId)
+        {
+            OpenExternal(entry.Homepage);
+            return;
+        }
+
+        var removing = (string)button.Content == "REMOVE";
+
+        var confirm = MessageBox.Show(
+            removing
+                ? $"Remove {entry.Name}?\n\nWindows will uninstall it. Anything you saved with "
+                  + "it — games, saves, configuration — is left alone; only the program goes.\n\n"
+                  + $"  winget uninstall --id {wingetId} --exact"
+                : $"Install {entry.Name}?\n\nWindows will download and install it, checking the "
+                  + "publisher and the file hash first. GamerGod does not host or modify "
+                  + "anything.\n\n"
+                  + $"  {WingetPackageManager.DescribeInstall(wingetId)}"
+                  + (entry.Note is { } note ? $"\n\nNote: {note}" : string.Empty),
+            "GamerGod",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+
+        if (confirm != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        var restore = (string)button.Content;
+        button.IsEnabled = false;
+        button.Content = removing ? "REMOVING" : "INSTALLING";
+
+        var progress = new Progress<string>(line => CatalogueStatus.Text = line);
+
+        try
+        {
+            var result = removing
+                ? await WingetPackageManager.UninstallAsync(wingetId, progress, default)
+                : await WingetPackageManager.InstallAsync(wingetId, progress, default);
+
+            if (result.Succeeded)
+            {
+                _sounds.Play(UiSound.Confirm);
+                CatalogueStatus.Text = removing
+                    ? $"{entry.Name} removed."
+                    : $"{entry.Name} installed.";
+
+                button.Content = removing ? "INSTALL" : "REMOVE";
+            }
+            else
+            {
+                _sounds.Play(UiSound.Alert);
+                button.Content = restore;
+                CatalogueStatus.Text = $"{entry.Name}: {(removing ? "removal" : "install")} did not complete.";
+
+                MessageBox.Show(
+                    $"{entry.Name} was not {(removing ? "removed" : "installed")}.\n\n"
+                    + $"{result.Tail()}\n\n"
+                    + "Nothing was left half-done — winget rolls back a failed install itself. "
+                    + $"The official page is the other route: {entry.Homepage}",
+                    "GamerGod",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            _sounds.Play(UiSound.Alert);
+            button.Content = restore;
+            CatalogueStatus.Text = $"{entry.Name}: {ex.Message}";
+        }
+        finally
+        {
+            button.IsEnabled = true;
+        }
+    }
+
+    private void OpenExternal(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception)
+        {
+            // A machine with no default browser is not worth a dialog over.
+        }
+    }
+
     // ---------------------------------------------------------------- scan
 
     private void Scan_Click(object sender, RoutedEventArgs e)
@@ -843,10 +1218,11 @@ public partial class MainWindow : Window
 
         var page = (sender as RadioButton)?.Tag as string ?? "Dashboard";
 
-        PageDashboard.Visibility = page == "Dashboard" ? Visibility.Visible : Visibility.Collapsed;
-        PageLibrary.Visibility = page == "Library" ? Visibility.Visible : Visibility.Collapsed;
-        PageMachine.Visibility = page == "Machine" ? Visibility.Visible : Visibility.Collapsed;
-        PageSettings.Visibility = page == "Settings" ? Visibility.Visible : Visibility.Collapsed;
+        Show(PageDashboard, page == "Dashboard");
+        Show(PageLibrary, page == "Library");
+        Show(PageGetMore, page == "GetMore");
+        Show(PageMachine, page == "Machine");
+        Show(PageSettings, page == "Settings");
 
         Tick();
 
@@ -857,6 +1233,36 @@ public partial class MainWindow : Window
             _libraryLoaded = true;
             _ = LoadLibraryAsync();
         }
+
+        // Same reasoning, and this one shells out to winget as well.
+        if (page == "GetMore" && !_catalogueLoaded)
+        {
+            _catalogueLoaded = true;
+            _ = LoadCatalogueAsync();
+        }
+    }
+
+    /// <summary>
+    /// Shows or hides a page, playing the entrance animation on the one being shown.
+    ///
+    /// <para>
+    /// The transform is attached here rather than in XAML because a shared Storyboard cannot
+    /// create one, and five pages each declaring their own would be five chances to get it
+    /// subtly different.
+    /// </para>
+    /// </summary>
+    private void Show(UIElement page, bool visible)
+    {
+        if (!visible)
+        {
+            page.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        page.RenderTransform = new TranslateTransform();
+        page.Visibility = Visibility.Visible;
+
+        ((Storyboard)FindResource("PageEnter")).Begin((FrameworkElement)page);
     }
 
     private void Tick()
@@ -869,13 +1275,64 @@ public partial class MainWindow : Window
 
     private void TitleBar_Drag(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 1)
+        // Double-click toggles maximise, which is what every other title bar on Windows does
+        // and the first thing anybody tries on a custom one.
+        if (e.ClickCount == 2)
         {
-            DragMove();
+            ToggleMaximise();
+            return;
         }
+
+        if (WindowState == WindowState.Maximized)
+        {
+            // Dragging a maximised window has to restore it first, and the restored window
+            // must land under the cursor rather than jumping to where it used to be.
+            var cursor = PointToScreen(e.GetPosition(this));
+            var ratio = RestoreBounds.Width / ActualWidth;
+
+            WindowState = WindowState.Normal;
+            Left = cursor.X - (e.GetPosition(this).X * ratio);
+            Top = cursor.Y - e.GetPosition(this).Y;
+
+            UpdateMaximiseGlyph();
+        }
+
+        DragMove();
     }
 
     private void Minimise_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void Maximise_Click(object sender, RoutedEventArgs e)
+    {
+        Tick();
+        ToggleMaximise();
+    }
+
+    private void ToggleMaximise()
+    {
+        WindowState = WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+
+        UpdateMaximiseGlyph();
+    }
+
+    /// <summary>
+    /// A maximised window with rounded corners and a border leaves a dark seam down each edge
+    /// of the screen, because the shape no longer matches the monitor. Squaring it off while
+    /// maximised is what makes the window look native rather than like a panel floating on
+    /// black.
+    /// </summary>
+    private void UpdateMaximiseGlyph()
+    {
+        var maximised = WindowState == WindowState.Maximized;
+
+        MaximiseButton.Content = maximised ? "" : "";
+        MaximiseButton.ToolTip = maximised ? "Restore" : "Maximise";
+
+        Shell.CornerRadius = new CornerRadius(maximised ? 0 : 8);
+        Shell.BorderThickness = new Thickness(maximised ? 0 : 1);
+    }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
@@ -935,3 +1392,4 @@ public partial class MainWindow : Window
         }
     }
 }
+

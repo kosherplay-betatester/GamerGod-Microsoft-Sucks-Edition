@@ -107,13 +107,49 @@
 
     <!-- ============================ Surfaces ============================ -->
 
+    <!--
+        Cards float rather than sit. The background is translucent so the atmosphere behind
+        shows through, a soft drop shadow separates the card from it, and the border warms on
+        hover — enough motion to feel alive, not enough to distract from a page of text.
+    -->
     <Style x:Key="Card" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource Surface}" />
+        <Setter Property="Background" Value="#D912161E" />
         <Setter Property="BorderBrush" Value="{StaticResource Line}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="CornerRadius" Value="5" />
         <Setter Property="Padding" Value="16" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#000000" BlurRadius="18" ShadowDepth="3"
+                                  Direction="270" Opacity="0.45" />
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="#3A4557" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
+
+    <!--
+        The amber halo. Applied to whatever is currently armed, and used sparingly enough that
+        seeing it anywhere means something on this machine is actually changed.
+    -->
+    <DropShadowEffect x:Key="SignalHalo" Color="{StaticResource SignalColor}"
+                      BlurRadius="26" ShadowDepth="0" Opacity="0.55" />
+
+    <!-- Pages arrive rather than appear. 160ms is under the threshold where motion starts
+         feeling like waiting, and the small rise gives the fade a direction. -->
+    <Storyboard x:Key="PageEnter">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                         From="0" To="1" Duration="0:0:0.16" />
+        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                         From="10" To="0" Duration="0:0:0.20">
+            <DoubleAnimation.EasingFunction>
+                <CubicEase EasingMode="EaseOut" />
+            </DoubleAnimation.EasingFunction>
+        </DoubleAnimation>
+    </Storyboard>
 
     <!-- ============================ Controls ============================ -->
 
@@ -173,7 +209,8 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Chrome" CornerRadius="3"
                             Background="{StaticResource Signal}"
-                            Padding="{TemplateBinding Padding}">
+                            Padding="{TemplateBinding Padding}"
+                            Effect="{StaticResource SignalHalo}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
@@ -230,8 +267,12 @@
                 <ControlTemplate TargetType="RadioButton">
                     <Border x:Name="Chrome" Background="Transparent" CornerRadius="3" Padding="13,9">
                         <Grid>
-                            <Rectangle x:Name="Rail" Width="2" HorizontalAlignment="Left"
-                                       Fill="{StaticResource Signal}" Visibility="Collapsed" />
+                            <!-- The active rail glows. It is the only persistent amber in the
+                                 navigation, so it can afford to. -->
+                            <Rectangle x:Name="Rail" Width="3" HorizontalAlignment="Left"
+                                       RadiusX="1.5" RadiusY="1.5"
+                                       Fill="{StaticResource Signal}" Visibility="Collapsed"
+                                       Effect="{StaticResource SignalHalo}" />
                             <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center" />
                         </Grid>
                     </Border>
@@ -377,7 +418,8 @@
 
                         <Border x:Name="Glow" CornerRadius="4" BorderThickness="1"
                                 BorderBrush="{StaticResource Signal}" Opacity="0"
-                                IsHitTestVisible="False" />
+                                IsHitTestVisible="False"
+                                Effect="{StaticResource SignalHalo}" />
                     </Grid>
 
                     <ControlTemplate.Triggers>

@@ -2,12 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="GamerGod"
-        Width="980" Height="660"
-        MinWidth="820" MinHeight="560"
+        Width="1180" Height="760"
+        MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="Transparent"
         AllowsTransparency="True"
         WindowStyle="None"
+        ResizeMode="CanResize"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
         FontFamily="{StaticResource Body}">
@@ -17,18 +18,68 @@
         enclosure, and a light bar above a dark panel is the single most common thing that makes
         a WPF application look unfinished.
     -->
-    <Border Background="{StaticResource Ground}"
+    <Border x:Name="Shell"
+            Background="{StaticResource Ground}"
             BorderBrush="{StaticResource Line}"
             BorderThickness="1"
             CornerRadius="8">
-        <Grid>
+        <Grid ClipToBounds="True">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
+            <!--
+                ==================== Atmosphere ====================
+                Behind everything and never hit-testable. Flat near-black reads as cheap at
+                this window size, and the fix is not colour but depth: two very low-opacity
+                lights, warm from the top left where the rest of this interface is lit from,
+                cool from the bottom right so the amber has something to be warm against.
+                Over that, an engineering grid at 3% — invisible until you look for it, and
+                the reason the panel feels like a surface rather than a void.
+            -->
+            <Grid Grid.Row="0" Grid.RowSpan="2" IsHitTestVisible="False">
+                <Rectangle>
+                    <Rectangle.Fill>
+                        <RadialGradientBrush GradientOrigin="0.15,0.05" Center="0.15,0.05"
+                                             RadiusX="1.1" RadiusY="1.1">
+                            <GradientStop Color="#1AFFB454" Offset="0" />
+                            <GradientStop Color="#00FFB454" Offset="1" />
+                        </RadialGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+
+                <Rectangle>
+                    <Rectangle.Fill>
+                        <RadialGradientBrush GradientOrigin="0.95,1" Center="0.95,1"
+                                             RadiusX="0.9" RadiusY="0.9">
+                            <GradientStop Color="#146FD3FF" Offset="0" />
+                            <GradientStop Color="#006FD3FF" Offset="1" />
+                        </RadialGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+
+                <Rectangle Opacity="0.5">
+                    <Rectangle.Fill>
+                        <DrawingBrush TileMode="Tile" Viewport="0,0,34,34"
+                                      ViewportUnits="Absolute">
+                            <DrawingBrush.Drawing>
+                                <GeometryDrawing Brush="#06FFFFFF">
+                                    <GeometryDrawing.Geometry>
+                                        <GeometryGroup>
+                                            <RectangleGeometry Rect="0,0,34,1" />
+                                            <RectangleGeometry Rect="0,0,1,34" />
+                                        </GeometryGroup>
+                                    </GeometryDrawing.Geometry>
+                                </GeometryDrawing>
+                            </DrawingBrush.Drawing>
+                        </DrawingBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+            </Grid>
+
             <!-- ==================== Title bar ==================== -->
-            <Grid Grid.Row="0" Height="44" Background="{StaticResource Sunk}"
+            <Grid Grid.Row="0" Height="46" Background="#B00D1017"
                   MouseLeftButtonDown="TitleBar_Drag">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -59,18 +110,38 @@
                                        Margin="7,7,0,0" />
                         </Grid>
                     </Border>
-                    <TextBlock Text="GamerGod" FontFamily="{StaticResource Display}" FontSize="13"
-                               FontWeight="SemiBold" Foreground="{StaticResource Ink}"
+                    <TextBlock Text="GamerGod" FontFamily="{StaticResource Display}" FontSize="14"
+                               FontWeight="Bold" Foreground="{StaticResource Ink}"
                                VerticalAlignment="Center" Margin="10,0,0,0" />
-                    <TextBlock Text="Microsoft Sucks Edition" FontSize="11.5"
-                               Foreground="{StaticResource InkFaint}"
-                               VerticalAlignment="Center" Margin="10,1,0,0" />
+
+                    <!--
+                        The edition name, and it is meant to be read. It was a footnote in
+                        InkFaint before, which is the colour this interface uses for things
+                        that do not matter — the one piece of attitude in the whole product,
+                        greyed out like a disclaimer.
+                    -->
+                    <Border Margin="12,0,0,0" Padding="8,2,8,3" CornerRadius="3"
+                            VerticalAlignment="Center"
+                            Background="{StaticResource SignalGlow}"
+                            BorderBrush="{StaticResource SignalDim}" BorderThickness="1">
+                        <TextBlock FontFamily="{StaticResource Display}" FontSize="10.5"
+                                   FontWeight="SemiBold" Foreground="{StaticResource Signal}"
+                                   Text="MICROSOFT SUCKS EDITION" />
+                    </Border>
+
+                    <TextBlock x:Name="Quip" FontSize="11.5" FontStyle="Italic"
+                               Foreground="{StaticResource InkDim}"
+                               VerticalAlignment="Center" Margin="11,1,0,0" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
                     <Button Style="{StaticResource ChromeButton}" Content="&#xE921;"
                             FontFamily="Segoe MDL2 Assets" FontSize="10"
                             Click="Minimise_Click" ToolTip="Minimise" />
+                    <Button x:Name="MaximiseButton" Style="{StaticResource ChromeButton}"
+                            Content="&#xE922;"
+                            FontFamily="Segoe MDL2 Assets" FontSize="10"
+                            Click="Maximise_Click" ToolTip="Maximise" />
                     <Button Style="{StaticResource ChromeButton}" Content="&#xE8BB;"
                             FontFamily="Segoe MDL2 Assets" FontSize="10"
                             Click="Close_Click" ToolTip="Close" />
@@ -85,7 +156,9 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Navigation -->
-                <Border Grid.Column="0" Background="{StaticResource Sunk}"
+                <!-- Translucent so the atmosphere reads through it and the rail feels like
+                     glass over the panel rather than a second opaque box. -->
+                <Border Grid.Column="0" Background="#8A0D1017"
                         BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0">
                     <DockPanel Margin="10,14,10,14">
                         <StackPanel DockPanel.Dock="Top">
@@ -95,6 +168,9 @@
                             <RadioButton x:Name="NavLibrary" Style="{StaticResource NavButton}"
                                          Content="Library"
                                          Checked="Nav_Changed" Tag="Library" />
+                            <RadioButton x:Name="NavGetMore" Style="{StaticResource NavButton}"
+                                         Content="Get more"
+                                         Checked="Nav_Changed" Tag="GetMore" />
                             <RadioButton x:Name="NavMachine" Style="{StaticResource NavButton}"
                                          Content="Your machine"
                                          Checked="Nav_Changed" Tag="Machine" />
@@ -305,6 +381,34 @@
                             </Grid>
                         </Border>
                     </Grid>
+
+                    <!-- ============ Get more ============ -->
+                    <ScrollViewer x:Name="PageGetMore" VerticalScrollBarVisibility="Auto"
+                                  Padding="26,22,26,26" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Eyebrow}" Text="INSTALL" />
+                            <TextBlock Style="{StaticResource H1}" Text="Emulators and launchers" />
+                            <TextBlock Style="{StaticResource BodyText}" Margin="0,7,0,0"
+                                       Text="Every install runs through the Windows Package Manager, which checks the publisher and the SHA-256 of every file before it writes anything. GamerGod hosts nothing and mirrors nothing — it knows the names, Windows does the downloading, and anything installed here uninstalls the same way." />
+
+                            <Border Style="{StaticResource Card}" Margin="0,14,0,0"
+                                    Background="{StaticResource Raised}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Eyebrow}" Text="BEFORE YOU START" />
+                                    <TextBlock Style="{StaticResource BodyText}"
+                                               Text="Emulators are legal. The games you run on them are your own business, and GamerGod will not help with that part — there are no ROMs here and no links to any. Several consoles also need a BIOS dumped from hardware you own; the entries that do are marked, because an emulator that boots to a black screen looks broken to somebody who was never told why." />
+                                    <TextBlock x:Name="SwitchNote" Style="{StaticResource BodyText}"
+                                               Margin="0,9,0,0"
+                                               Foreground="{StaticResource InkFaint}" />
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock x:Name="CatalogueStatus" Style="{StaticResource Mono}"
+                                       Margin="0,16,0,0" />
+
+                            <ItemsControl x:Name="CatalogueItems" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </ScrollViewer>
 
                     <!-- ============ Your machine ============ -->
                     <ScrollViewer x:Name="PageMachine" VerticalScrollBarVisibility="Auto"
