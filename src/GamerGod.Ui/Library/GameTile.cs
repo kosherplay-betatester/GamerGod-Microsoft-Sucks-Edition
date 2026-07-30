@@ -38,8 +38,8 @@ public sealed class GameTile : INotifyPropertyChanged
     {
         Entry = entry;
         _cover = Load(LocalArtPath(entry));
-        Fallback = BuildFallback(entry.Name);
-        Initial = InitialOf(entry.Name);
+        Fallback = TileArt.Gradient(entry.Name);
+        Initial = TileArt.Initial(entry.Name);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -182,87 +182,6 @@ public sealed class GameTile : INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// A generated tile for titles with no art anywhere.
-    ///
-    /// <para>
-    /// The hue is derived from the name so a given game always looks the same, which makes the
-    /// grid learnable rather than arbitrary. Saturation and lightness are held low so these sit
-    /// in the same world as the instrument chrome instead of shouting over the real covers next
-    /// to them.
-    /// </para>
-    /// </summary>
-    private static Brush BuildFallback(string name)
-    {
-        var hue = StableHue(name);
-
-        var top = FromHsl(hue, 0.28, 0.20);
-        var bottom = FromHsl((hue + 24) % 360, 0.32, 0.10);
-
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = new System.Windows.Point(0, 0),
-            EndPoint = new System.Windows.Point(0.6, 1),
-        };
-
-        brush.GradientStops.Add(new GradientStop(top, 0));
-        brush.GradientStops.Add(new GradientStop(bottom, 1));
-        brush.Freeze();
-
-        return brush;
-    }
-
-    /// <summary>
-    /// FNV-1a rather than string.GetHashCode, which .NET randomises per process — a colour
-    /// that changed every launch would make the grid feel unstable.
-    /// </summary>
-    private static double StableHue(string value)
-    {
-        var hash = 2166136261u;
-
-        foreach (var c in value)
-        {
-            hash ^= char.ToUpperInvariant(c);
-            hash *= 16777619u;
-        }
-
-        return hash % 360;
-    }
-
-    private static Color FromHsl(double hue, double saturation, double lightness)
-    {
-        var c = (1 - Math.Abs((2 * lightness) - 1)) * saturation;
-        var x = c * (1 - Math.Abs((hue / 60 % 2) - 1));
-        var m = lightness - (c / 2);
-
-        var (r, g, b) = hue switch
-        {
-            < 60 => (c, x, 0.0),
-            < 120 => (x, c, 0.0),
-            < 180 => (0.0, c, x),
-            < 240 => (0.0, x, c),
-            < 300 => (x, 0.0, c),
-            _ => (c, 0.0, x),
-        };
-
-        return Color.FromRgb(
-            (byte)Math.Clamp((r + m) * 255, 0, 255),
-            (byte)Math.Clamp((g + m) * 255, 0, 255),
-            (byte)Math.Clamp((b + m) * 255, 0, 255));
-    }
-
-    private static string InitialOf(string name)
-    {
-        foreach (var c in name)
-        {
-            if (char.IsLetterOrDigit(c))
-            {
-                return char.ToUpperInvariant(c).ToString();
-            }
-        }
-
-        return "?";
-    }
 
     private void Raise([CallerMemberName] string? property = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));

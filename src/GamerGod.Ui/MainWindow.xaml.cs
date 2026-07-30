@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using GamerGod.Core.Catalogue;
 using GamerGod.Core.Diagnostics;
 using GamerGod.Core.Engine;
@@ -33,6 +35,9 @@ public partial class MainWindow : Window
     private bool _libraryLoaded;
     private bool _catalogueLoaded;
     private GameTile? _selected;
+
+    /// <summary>Catalogue row icons, by entry id, so installed programs can upgrade in place.</summary>
+    private readonly Dictionary<string, Image> _catalogueIcons = [];
 
     public MainWindow()
     {
@@ -684,6 +689,135 @@ public partial class MainWindow : Window
             : Visibility.Collapsed;
     }
 
+    // ---------------------------------------------------------------- apps
+
+    /// <summary>
+    /// The catalogue, filtered to what is actually on this machine, with real icons and a way
+    /// to start each one.
+    ///
+    /// <para>
+    /// Matched against the uninstall registry rather than winget, because winget knows a
+    /// package is installed but not where it was put — and a launch button needs a path.
+    /// </para>
+    /// </summary>
+    private void LoadInstalledApps()
+    {
+        InstalledItems.Items.Clear();
+        InstalledEmpty.Visibility = Visibility.Collapsed;
+
+        ImmutableArray<InstalledApp> present;
+        try
+        {
+            present = InstalledApps.Scan();
+        }
+        catch (Exception ex)
+        {
+            InstalledCount.Text = string.Empty;
+            InstalledEmpty.Text = $"The installed-programs list could not be read: {ex.Message}";
+            InstalledEmpty.Visibility = Visibility.Visible;
+            return;
+        }
+
+        var tiles = new List<AppTile>();
+
+        foreach (var entry in SoftwareCatalogue.All)
+        {
+            var match = present.FirstOrDefault(a => InstalledMatch.IsSameProgram(entry.Name, a.Name));
+
+            if (match is not null)
+            {
+                tiles.Add(AppTile.For(entry, match));
+            }
+        }
+
+        // Launchers first, then emulators; alphabetical within each. A grid whose order changed
+        // between visits would be unusable, and registry enumeration order is arbitrary.
+        foreach (var tile in tiles
+                     .OrderBy(t => t.Entry.Kind == CatalogueKind.Launcher ? 0 : 1)
+                     .ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            InstalledItems.Items.Add(tile);
+        }
+
+        var launchers = tiles.Count(t => t.Entry.Kind == CatalogueKind.Launcher);
+        var emulators = tiles.Count - launchers;
+
+        InstalledCount.Text =
+            $"{launchers} launcher{(launchers == 1 ? "" : "s")}, "
+            + $"{emulators} emulator{(emulators == 1 ? "" : "s")}";
+
+        if (tiles.Count == 0)
+        {
+            InstalledEmpty.Text =
+                "None of the launchers or emulators GamerGod knows about are installed here. "
+                + "Get more has the full list — everything installs through the Windows Package "
+                + "Manager, and anything installed there appears on this page.";
+            InstalledEmpty.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void Installed_Rescan(object sender, RoutedEventArgs e)
+    {
+        Tick();
+        LoadInstalledApps();
+    }
+
+    private async void App_Launch(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not AppTile tile)
+        {
+            return;
+        }
+
+        if (tile.LaunchTarget is not { } target)
+        {
+            // The program is installed but no executable could be identified from the registry.
+            // Saying that is better than a button that appears to do nothing.
+            MessageBox.Show(
+                $"{tile.Name} is installed, but GamerGod could not work out which executable to "
+                + "start — its installer did not record one. Start it from the Start menu; "
+                + "Game Mode can be armed from the Dashboard first.",
+                "GamerGod",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        Tick();
+
+        // Same order as a game launch, for the same reason: arming after the process has
+        // started is the moment the confinement is least useful.
+        if (MasterSwitch.IsChecked != true)
+        {
+            MasterSwitch.IsChecked = true;
+            await ApplyAsync(turnOn: true);
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target)
+            {
+                UseShellExecute = true,
+
+                // Several launchers resolve their own data relative to the working directory
+                // and misbehave when started from somewhere else.
+                WorkingDirectory = System.IO.Path.GetDirectoryName(target) ?? string.Empty,
+            });
+
+            _sounds.Play(UiSound.Confirm);
+        }
+        catch (Exception ex)
+        {
+            _sounds.Play(UiSound.Alert);
+            MessageBox.Show(
+                $"Could not start {tile.Name}.\n\n{ex.Message}\n\n"
+                + "Game Mode is still on — turn it off here, run 'gamergod off', or reboot.",
+                "GamerGod",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
     // ---------------------------------------------------------------- get more
 
     /// <summary>
@@ -698,11 +832,12 @@ public partial class MainWindow : Window
     private async Task LoadCatalogueAsync()
     {
         CatalogueItems.Items.Clear();
+        _catalogueIcons.Clear();
         SwitchNote.Text = SoftwareCatalogue.SwitchNote;
 
         var rows = new List<(CatalogueEntry Entry, Border Card, Button Action, Border Chip, TextBlock ChipText)>();
 
-        foreach (var group in SoftwareCatalogue.Launchers.Concat(SoftwareCatalogue.Emulators))
+        foreach (var group in SoftwareCatalogue.AllGroups)
         {
             CatalogueItems.Items.Add(new TextBlock
             {
@@ -757,6 +892,8 @@ public partial class MainWindow : Window
             Present(row, StateOf(row.Entry, installed));
         }
 
+        ApplyRealIcons();
+
         var count = rows.Count(r => r.Entry.WingetId is { } id && installed.Contains(id));
 
         CatalogueStatus.Text =
@@ -800,9 +937,55 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center,
         });
 
-        var body = new StackPanel();
-        body.Children.Add(head);
-        body.Children.Add(new TextBlock
+        var text = new StackPanel();
+        text.Children.Add(head);
+
+        // The generated mark, with the real icon over it once one is found. A row that shows
+        // nothing until winget answers reads as unfinished, so this is drawn immediately and
+        // upgraded in place if the program turns out to be installed.
+        var mark = new Border
+        {
+            Width = 40,
+            Height = 40,
+            CornerRadius = new CornerRadius(4),
+            ClipToBounds = true,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 13, 0),
+            Background = TileArt.Gradient(entry.Name),
+        };
+
+        var markIcon = new Image
+        {
+            Width = 28,
+            Height = 28,
+            Stretch = Stretch.Uniform,
+            Visibility = Visibility.Collapsed,
+        };
+
+        RenderOptions.SetBitmapScalingMode(markIcon, BitmapScalingMode.HighQuality);
+
+        var markGrid = new Grid();
+        markGrid.Children.Add(new TextBlock
+        {
+            Text = TileArt.Initial(entry.Name),
+            FontFamily = (FontFamily)FindResource("Display"),
+            FontSize = 18,
+            FontWeight = FontWeights.Bold,
+            Foreground = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        markGrid.Children.Add(markIcon);
+        mark.Child = markGrid;
+
+        var body = new StackPanel { Orientation = Orientation.Horizontal };
+        body.Children.Add(mark);
+        body.Children.Add(text);
+
+        // Kept so the installed pass can drop a real icon in without rebuilding the row.
+        _catalogueIcons[entry.Id] = markIcon;
+
+        text.Children.Add(new TextBlock
         {
             Text = entry.Systems,
             Style = (Style)FindResource("BodyText"),
@@ -812,7 +995,7 @@ public partial class MainWindow : Window
 
         if (entry.Note is { } note)
         {
-            body.Children.Add(new TextBlock
+            text.Children.Add(new TextBlock
             {
                 Text = "→ " + note,
                 Style = (Style)FindResource("BodyText"),
@@ -915,6 +1098,46 @@ public partial class MainWindow : Window
 
         row.Card.BorderBrush = (Brush)FindResource(
             state == CatalogueState.Installed ? "LineSoft" : "Line");
+    }
+
+    /// <summary>
+    /// Swaps the generated mark for the program's own icon on rows whose software is installed.
+    ///
+    /// <para>
+    /// Only installed programs have an icon to read — it lives inside their executable — so a
+    /// row that keeps its generated mark is telling you something true rather than failing to
+    /// load.
+    /// </para>
+    /// </summary>
+    private void ApplyRealIcons()
+    {
+        ImmutableArray<InstalledApp> present;
+        try
+        {
+            present = InstalledApps.Scan();
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        foreach (var entry in SoftwareCatalogue.All)
+        {
+            if (!_catalogueIcons.TryGetValue(entry.Id, out var image))
+            {
+                continue;
+            }
+
+            var app = present.FirstOrDefault(a => InstalledMatch.IsSameProgram(entry.Name, a.Name));
+
+            if (app is null || AppTile.For(entry, app).Icon is not { } icon)
+            {
+                continue;
+            }
+
+            image.Source = icon;
+            image.Visibility = Visibility.Visible;
+        }
     }
 
     private void Catalogue_OpenSite(object sender, RoutedEventArgs e)
@@ -1220,6 +1443,7 @@ public partial class MainWindow : Window
 
         Show(PageDashboard, page == "Dashboard");
         Show(PageLibrary, page == "Library");
+        Show(PageInstalled, page == "Installed");
         Show(PageGetMore, page == "GetMore");
         Show(PageMachine, page == "Machine");
         Show(PageSettings, page == "Settings");
@@ -1239,6 +1463,13 @@ public partial class MainWindow : Window
         {
             _catalogueLoaded = true;
             _ = LoadCatalogueAsync();
+        }
+
+        // Rescanned every visit rather than cached: something installed on the Get more page
+        // must appear here without the user having to work out that a refresh exists.
+        if (page == "Installed")
+        {
+            LoadInstalledApps();
         }
     }
 

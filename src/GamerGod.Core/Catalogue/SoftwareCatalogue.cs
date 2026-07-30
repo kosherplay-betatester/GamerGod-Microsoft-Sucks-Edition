@@ -152,6 +152,104 @@ public static class SoftwareCatalogue
         },
     ];
 
+    /// <summary>
+    /// Overclocking, monitoring and the on-screen overlay.
+    ///
+    /// <para>
+    /// GamerGod does not draw an overlay and does not touch a clock speed. Both would mean
+    /// injecting into a running game or writing to hardware registers, which Articles III and V
+    /// rule out — so the honest thing is to name the tools that do it properly rather than ship
+    /// a worse version of them. Every program here is also on GamerGod's own protected list:
+    /// they are never demoted, never moved, and never suspended, because a fan curve that stops
+    /// being applied is how a machine cooks.
+    /// </para>
+    /// </summary>
+    public static ImmutableArray<CatalogueGroup> Tuning { get; } =
+    [
+        new()
+        {
+            Title = "Overclocking and the on-screen overlay",
+            Entries =
+            [
+                new()
+                {
+                    Id = "afterburner", Name = "MSI Afterburner", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "The standard GPU tool: core and memory clocks, voltage, fan curves, and the overlay everyone recognises. Works on any card, not just MSI.",
+                    WingetId = "Guru3D.Afterburner", Homepage = "https://www.msi.com/Landing/afterburner/graphics-cards",
+                    Note = "The overlay itself is RivaTuner, which Afterburner bundles and installs alongside it.",
+                },
+                new()
+                {
+                    Id = "rtss", Name = "RivaTuner Statistics Server", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "The overlay engine: framerate, frametimes, CPU and GPU load, temperatures and memory, drawn over the game. Also the best frame limiter on Windows.",
+                    WingetId = "Guru3D.RTSS", Homepage = "https://www.guru3d.com/download/rtss-rivatuner-statistics-server-download/",
+                    Note = "It draws by hooking the game's graphics API. That is injection, which GamerGod will never do itself — and a handful of kernel anti-cheats object to it. If a protected game refuses to start, close RTSS first.",
+                },
+                new()
+                {
+                    Id = "hwinfo", Name = "HWiNFO", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "Reads every sensor your motherboard exposes, and feeds them to the RivaTuner overlay.",
+                    WingetId = "REALiX.HWiNFO", Homepage = "https://www.hwinfo.com/",
+                },
+                new()
+                {
+                    Id = "capframex", Name = "CapFrameX", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "Captures frametimes and analyses them properly — percentiles, stutter, and A/B comparison rather than an average FPS number.",
+                    WingetId = "CXWorld.CapFrameX", Homepage = "https://www.capframex.com/",
+                    Note = "The right tool for checking whether Game Mode actually helped on your machine.",
+                },
+                new()
+                {
+                    Id = "gpuz", Name = "GPU-Z", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "Tells you exactly what card you have, what it is clocked at, and whether it is throttling.",
+                    WingetId = "TechPowerUp.GPU-Z", Homepage = "https://www.techpowerup.com/gpuz/",
+                },
+                new()
+                {
+                    Id = "fancontrol", Name = "FanControl", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "Every fan in the machine on one curve, driven by whichever sensor you choose. Open source.",
+                    WingetId = "Rem0o.FanControl", Homepage = "https://getfancontrol.com/",
+                },
+                new()
+                {
+                    Id = "coretemp", Name = "Core Temp", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "Per-core CPU temperature and clock, in the notification area.",
+                    WingetId = "ALCPU.CoreTemp", Homepage = "https://www.alcpu.com/CoreTemp/",
+                },
+                new()
+                {
+                    Id = "occt", Name = "OCCT", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "Stability testing for CPU, GPU, memory and power supply. What you run after changing a clock, before trusting it.",
+                    WingetId = "OCBase.OCCT.Personal", Homepage = "https://www.ocbase.com/",
+                    Note = "Loads hardware far harder than any game will. Watch the temperatures.",
+                },
+                new()
+                {
+                    Id = "furmark", Name = "FurMark 2", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "GPU stress test and a quick benchmark.",
+                    WingetId = "Geeks3D.FurMark.2", Homepage = "https://geeks3d.com/furmark/",
+                },
+                new()
+                {
+                    Id = "throttlestop", Name = "ThrottleStop", Kind = CatalogueKind.Launcher,
+                    Group = "Overclocking and the on-screen overlay",
+                    Systems = "Undervolting and throttling control for Intel laptops. Often worth more frames than any overclock.",
+                    WingetId = "TechPowerUp.ThrottleStop", Homepage = "https://www.techpowerup.com/download/techpowerup-throttlestop/",
+                    Note = "Laptops only, Intel only. Changes power limits directly — read what a setting does before changing it.",
+                },
+            ],
+        },
+    ];
+
     /// <summary>Ordered oldest hardware first, which is also roughly easiest to hardest to run.</summary>
     public static ImmutableArray<CatalogueGroup> Emulators { get; } =
     [
@@ -431,6 +529,15 @@ public static class SoftwareCatalogue
     public static ImmutableArray<CatalogueEntry> All { get; } =
     [
         .. Launchers.SelectMany(g => g.Entries),
+        .. Tuning.SelectMany(g => g.Entries),
         .. Emulators.SelectMany(g => g.Entries),
+    ];
+
+    /// <summary>Every group, in the order the interface presents them.</summary>
+    public static ImmutableArray<CatalogueGroup> AllGroups { get; } =
+    [
+        .. Launchers,
+        .. Tuning,
+        .. Emulators,
     ];
 }

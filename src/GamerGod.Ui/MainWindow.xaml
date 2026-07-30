@@ -168,6 +168,9 @@
                             <RadioButton x:Name="NavLibrary" Style="{StaticResource NavButton}"
                                          Content="Library"
                                          Checked="Nav_Changed" Tag="Library" />
+                            <RadioButton x:Name="NavInstalled" Style="{StaticResource NavButton}"
+                                         Content="Apps"
+                                         Checked="Nav_Changed" Tag="Installed" />
                             <RadioButton x:Name="NavGetMore" Style="{StaticResource NavButton}"
                                          Content="Get more"
                                          Checked="Nav_Changed" Tag="GetMore" />
@@ -195,7 +198,7 @@
                 <Grid Grid.Column="1">
 
                     <!-- ============ Dashboard ============ -->
-                    <ScrollViewer x:Name="PageDashboard" VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer x:Name="PageDashboard" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   Padding="26,22,26,26">
                         <StackPanel>
 
@@ -279,7 +282,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                       Padding="26,22,26,26">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource Eyebrow}" Text="LIBRARY" />
@@ -382,8 +385,47 @@
                         </Border>
                     </Grid>
 
+                    <!-- ============ Apps ============ -->
+                    <ScrollViewer x:Name="PageInstalled" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Padding="26,22,26,26" Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Eyebrow}" Text="ON THIS MACHINE" />
+                            <TextBlock Style="{StaticResource H1}" Text="Your launchers and emulators" />
+                            <TextBlock Style="{StaticResource BodyText}" Margin="0,7,0,0"
+                                       Text="Everything GamerGod knows about that is actually installed here, with the icon read out of the program's own executable. Start any of them from here — Game Mode arms first, exactly as it does for a game." />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                <Button Style="{StaticResource GhostButton}" Content="RESCAN"
+                                        Click="Installed_Rescan" />
+                                <TextBlock x:Name="InstalledCount" Style="{StaticResource Mono}"
+                                           VerticalAlignment="Center" Margin="14,0,0,0" />
+                            </StackPanel>
+
+                            <ItemsControl x:Name="InstalledItems" Margin="0,18,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource AppTileButton}"
+                                                Click="App_Launch"
+                                                Tag="{Binding}"
+                                                ToolTip="{Binding Systems}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock x:Name="InstalledEmpty" Style="{StaticResource BodyText}"
+                                       Margin="0,18,0,0" Visibility="Collapsed" />
+                        </StackPanel>
+                    </ScrollViewer>
+
                     <!-- ============ Get more ============ -->
-                    <ScrollViewer x:Name="PageGetMore" VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer x:Name="PageGetMore" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   Padding="26,22,26,26" Visibility="Collapsed">
                         <StackPanel>
                             <TextBlock Style="{StaticResource Eyebrow}" Text="INSTALL" />
@@ -411,7 +453,7 @@
                     </ScrollViewer>
 
                     <!-- ============ Your machine ============ -->
-                    <ScrollViewer x:Name="PageMachine" VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer x:Name="PageMachine" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   Padding="26,22,26,26" Visibility="Collapsed">
                         <StackPanel>
                             <TextBlock Style="{StaticResource Eyebrow}" Text="ENVIRONMENT SCAN" />
@@ -431,7 +473,7 @@
                     </ScrollViewer>
 
                     <!-- ============ Settings ============ -->
-                    <ScrollViewer x:Name="PageSettings" VerticalScrollBarVisibility="Auto"
+                    <ScrollViewer x:Name="PageSettings" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                   Padding="26,22,26,26" Visibility="Collapsed">
                         <StackPanel>
                             <TextBlock Style="{StaticResource Eyebrow}" Text="SETTINGS" />

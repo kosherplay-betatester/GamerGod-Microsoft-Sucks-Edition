@@ -1,4 +1,5 @@
 using GamerGod.Core.Catalogue;
+using GamerGod.Core.Safety;
 using Xunit;
 
 namespace GamerGod.Core.Tests.Catalogue;
@@ -92,6 +93,49 @@ public sealed class SoftwareCatalogueTests
     }
 
     [Fact]
+    public void The_overlay_entry_admits_that_it_injects()
+    {
+        // GamerGod's own Charter forbids injecting into a game, and RivaTuner draws its overlay
+        // by hooking the graphics API. Recommending it without saying so would be GamerGod
+        // holding itself to a standard it quietly routes around.
+        var rtss = SoftwareCatalogue.All.Single(e => e.Id == "rtss");
+
+        Assert.NotNull(rtss.Note);
+        Assert.Contains("inject", rtss.Note!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("anti-cheat", rtss.Note!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("MSIAfterburner.exe")]
+    [InlineData("RTSS.exe")]
+    [InlineData("RTSSHooksLoader64.exe")]
+    [InlineData("FanControl.exe")]
+    [InlineData("HWiNFO64.exe")]
+    [InlineData("CoreTemp.exe")]
+    [InlineData("ThrottleStop.exe")]
+    [InlineData("GPU-Z.exe")]
+    [InlineData("CapFrameX.exe")]
+    public void The_tools_this_page_recommends_are_ones_GamerGod_refuses_to_touch(string process)
+    {
+        // Recommending a fan controller on one page and demoting it to efficiency mode on
+        // another is how a machine cooks. Written with the filenames these programs actually
+        // run under, because that is what the policy is handed at runtime — the list previously
+        // held "hwinfo", which no machine ever runs, so the entry read as protection and
+        // provided none.
+        Assert.True(
+            ProcessSafetyPolicy.IsProtected(process),
+            $"{process} is recommended by the catalogue but is not protected from suspension");
+    }
+
+    [Fact]
+    public void The_tuning_group_offers_the_overlay_people_actually_use()
+    {
+        Assert.Contains(SoftwareCatalogue.All, e => e.Id == "afterburner");
+        Assert.Contains(SoftwareCatalogue.All, e => e.Id == "rtss");
+        Assert.Contains(SoftwareCatalogue.All, e => e.Id == "capframex");
+    }
+
+    [Fact]
     public void The_major_storefronts_are_all_present()
     {
         foreach (var id in new[] { "steam", "epic", "gog", "ea", "ubisoft", "battlenet", "rockstar" })
@@ -172,3 +216,4 @@ public sealed class SoftwareCatalogueTests
         Assert.DoesNotContain(SoftwareCatalogue.All, e => e.Id is "yuzu" or "ryujinx");
     }
 }
+

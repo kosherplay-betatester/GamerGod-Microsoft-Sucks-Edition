@@ -73,6 +73,32 @@ public static class ProcessSafetyPolicy
         Thermal("gigabytecontrolcenter", "Gigabyte Control Center fan control."),
         Thermal("mysticlight", "MSI Mystic Light, which shares the embedded controller."),
 
+        // The names these actually run under.
+        //
+        // "hwinfo" was the only HWiNFO entry, and no machine runs a process by that name — the
+        // binary is HWiNFO64.exe. The entry read as protection and provided none, which is
+        // worse than an obvious gap because it stops anyone looking. Found by checking a
+        // running machine against this list rather than by reading it.
+        Thermal("hwinfo64", "HWiNFO, 64-bit. The process name the application actually uses."),
+        Thermal("hwinfo32", "HWiNFO, 32-bit."),
+        Thermal("rtsshooksloader64", "RivaTuner's loader. Suspending it breaks the overlay and its frame limiter."),
+        Thermal("rtsshooksloader", "RivaTuner's loader, 32-bit."),
+        Thermal("coretemp", "Core Temp reports per-core temperature and can drive alarms."),
+        Thermal("hwmonitor", "CPUID HWMonitor."),
+        Thermal("librehardwaremonitor", "LibreHardwareMonitor, a sensor source for fan control software."),
+        Thermal("openhardwaremonitor", "OpenHardwareMonitor, a sensor source for fan control software."),
+
+        // ---- Measurement.
+        //
+        // These cannot damage hardware, and they are protected anyway. Suspending the tool
+        // somebody is using to check whether GamerGod helped would corrupt the only evidence
+        // that could contradict this product — which is a conflict of interest, not an
+        // oversight, and Article VII is the reason it is not allowed.
+        Thermal("gpuz", "GPU-Z reports clocks and throttling. Suspending it falsifies the reading."),
+        Thermal("gpu-z", "GPU-Z, alternate process name."),
+        Thermal("capframex", "CapFrameX captures frametimes. Suspending it corrupts the measurement."),
+        Thermal("presentmon", "PresentMon captures frame data, including GamerGod's own benchmark."),
+
         // ---- Laptop thermal management.
         //
         // Laptops matter more here than desktops, not less. They run hotter, have far less
