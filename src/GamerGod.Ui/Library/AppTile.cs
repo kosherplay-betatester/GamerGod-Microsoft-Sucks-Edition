@@ -54,11 +54,13 @@ public sealed class AppTile
 
     public static AppTile For(CatalogueEntry entry, InstalledApp? installed) => new(entry, installed);
 
-    private static ImageSource? LoadIcon(InstalledApp? installed)
+    private ImageSource? LoadIcon(InstalledApp? installed)
     {
         if (installed is null)
         {
-            return null;
+            // Not installed, so there is no executable to read. Whatever a previous opt-in
+            // fetch pulled from the project's own site stands in.
+            return Decode(AppIconCache.FindCached(Entry.Id));
         }
 
         // The icon path first, then the executable. They are usually the same file, but an
@@ -91,6 +93,36 @@ public sealed class AppTile
             }
         }
 
-        return null;
+        // The executable had nothing readable. A downloaded logo is better than a letter.
+        return Decode(AppIconCache.FindCached(Entry.Id));
+    }
+
+    private static ImageSource? Decode(string? path)
+    {
+        if (path is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+
+            // Multi-frame .ico files are common here, and WPF picks the frame nearest the
+            // requested width — which is the whole reason to state one.
+            bitmap.DecodePixelWidth = 64;
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            bitmap.UriSource = new Uri(path);
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            return bitmap;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }

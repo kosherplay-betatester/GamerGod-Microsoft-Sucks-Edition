@@ -297,7 +297,7 @@
                                     <Button Style="{StaticResource GhostButton}" Content="REFRESH"
                                             Click="Library_Refresh" />
                                     <Button x:Name="GetArtButton" Style="{StaticResource GhostButton}"
-                                            Content="GET COVER ART" Margin="8,0,0,0"
+                                            Content="GET ARTWORK" Margin="8,0,0,0"
                                             Click="GetArt_Click" />
                                     <TextBlock x:Name="LibraryCount" Style="{StaticResource Mono}"
                                                VerticalAlignment="Center" Margin="14,0,0,0" />
@@ -634,7 +634,7 @@
                                     <Grid>
                                         <StackPanel Margin="0,0,70,0">
                                             <TextBlock Style="{StaticResource H2}" FontSize="13.5"
-                                                       Text="Download missing cover art" />
+                                                       Text="Download missing artwork" />
                                             <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
                                                        Text="The only thing in GamerGod that uses the internet, and it is off until you switch it on. It asks a public store CDN for one image per game, by store id, with no account and no identifier attached — then keeps the file so it never asks again. Turning this off stops all outbound traffic; art already downloaded stays." />
                                         </StackPanel>

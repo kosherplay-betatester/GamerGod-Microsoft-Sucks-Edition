@@ -600,17 +600,21 @@ public partial class MainWindow : Window
         if (!_settings.FetchCoverArt)
         {
             var consent = MessageBox.Show(
-                "GamerGod can download the missing box art from the same public store servers "
-                + "your game client uses.\n\n"
+                "GamerGod can download the artwork it is missing: box art for your games, from "
+                + "the same public store servers your game client uses, and logos for emulators "
+                + "and launchers, from each project's own website.\n\n"
                 + "This is the only feature that uses the internet. If you say yes:\n\n"
-                + "  · art is requested by numeric store id — one image per game\n"
+                + "  · game art is requested by numeric store id — one image per game\n"
                 + "  · for a game with no cover published, the store is asked where its\n"
                 + "    header art lives, then that image is fetched\n"
+                + "  · a program's logo comes from its own site, the same one its entry links to\n"
                 + "  · no account, cookie, or identifier is attached\n"
                 + "  · nothing about your machine, your settings, or your usage is sent\n"
-                + "  · each image is saved locally, so it is requested exactly once\n\n"
+                + "  · every image is saved locally, so it is requested exactly once\n\n"
+                + "Programs you already have need none of this — their icon is read out of "
+                + "their own executable, with no network involved.\n\n"
                 + "You can turn this back off in Settings at any time.\n\n"
-                + "Download cover art?",
+                + "Download artwork?",
                 "GamerGod",
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Question);
@@ -905,6 +909,101 @@ public partial class MainWindow : Window
 
         CatalogueStatus.Text =
             $"{SoftwareCatalogue.All.Length} listed  ·  {count} already installed";
+
+        await FetchMissingAppIconsAsync();
+    }
+
+    /// <summary>
+    /// Fills in logos for software that is not installed, from each project's own site.
+    ///
+    /// <para>
+    /// Only for rows still showing the generated mark. Anything installed already has real
+    /// artwork from its own executable, which costs nothing and is always current.
+    /// </para>
+    /// </summary>
+    private async Task FetchMissingAppIconsAsync()
+    {
+        var pending = SoftwareCatalogue.All
+            .Where(e => _catalogueIcons.TryGetValue(e.Id, out var image)
+                        && image.Visibility != Visibility.Visible)
+            .ToImmutableArray();
+
+        if (pending.IsEmpty)
+        {
+            return;
+        }
+
+        // Anything already downloaded is drawn immediately, with no network involved.
+        var remaining = new List<CatalogueEntry>();
+
+        foreach (var entry in pending)
+        {
+            if (AppIconCache.FindCached(entry.Id) is { } cached)
+            {
+                ShowIcon(entry.Id, cached);
+            }
+            else
+            {
+                remaining.Add(entry);
+            }
+        }
+
+        if (remaining.Count == 0 || !_settings.FetchCoverArt)
+        {
+            return;
+        }
+
+        var restore = CatalogueStatus.Text;
+        var found = 0;
+
+        foreach (var entry in remaining)
+        {
+            CatalogueStatus.Text = $"finding the logo for {entry.Name}…";
+
+            var path = await AppIconCache.TryFetchAsync(entry.Id, entry.Homepage, default);
+
+            if (path is not null && ShowIcon(entry.Id, path))
+            {
+                found++;
+            }
+        }
+
+        CatalogueStatus.Text = found == 0
+            ? restore
+            : $"{restore}  ·  {found} logo{(found == 1 ? "" : "s")} found";
+    }
+
+    private bool ShowIcon(string entryId, string path)
+    {
+        if (!_catalogueIcons.TryGetValue(entryId, out var image))
+        {
+            return false;
+        }
+
+        try
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+
+            // Multi-frame .ico files are common here, and WPF picks the frame nearest the
+            // requested width — which is the whole reason to state one.
+            bitmap.DecodePixelWidth = 64;
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+            bitmap.UriSource = new Uri(path);
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            image.Source = bitmap;
+            image.Visibility = Visibility.Visible;
+
+            return true;
+        }
+        catch (Exception)
+        {
+            // An SVG, or a format WPF will not decode. The generated mark stays.
+            return false;
+        }
     }
 
     private static CatalogueState StateOf(CatalogueEntry entry, ImmutableHashSet<string> installed) =>
