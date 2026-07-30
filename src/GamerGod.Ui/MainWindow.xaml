@@ -183,27 +183,114 @@
                     </ScrollViewer>
 
                     <!-- ============ Library ============ -->
-                    <ScrollViewer x:Name="PageLibrary" VerticalScrollBarVisibility="Auto"
-                                  Padding="26,22,26,26" Visibility="Collapsed">
-                        <StackPanel>
-                            <TextBlock Style="{StaticResource Eyebrow}" Text="LIBRARY" />
-                            <TextBlock Style="{StaticResource H1}" Text="Everything you play" />
-                            <TextBlock Style="{StaticResource BodyText}" Margin="0,7,0,0"
-                                       Text="Found by reading what your stores already keep on disk. Nothing is scraped, no account is touched, and nothing leaves this machine. Launching a game turns Game Mode on first, then hands off to the store so the game gets the environment it expects." />
+                    <Grid x:Name="PageLibrary" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
-                            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
-                                <Button Style="{StaticResource GhostButton}" Content="REFRESH"
-                                        Click="Library_Refresh" />
-                                <TextBlock x:Name="LibraryCount" Style="{StaticResource Mono}"
-                                           VerticalAlignment="Center" Margin="14,0,0,0" />
+                        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                      Padding="26,22,26,26">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Eyebrow}" Text="LIBRARY" />
+                                <TextBlock Style="{StaticResource H1}" Text="Everything you play" />
+                                <TextBlock x:Name="LibraryBlurb" Style="{StaticResource BodyText}"
+                                           Margin="0,7,0,0" />
+
+                                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                    <Button Style="{StaticResource GhostButton}" Content="REFRESH"
+                                            Click="Library_Refresh" />
+                                    <Button x:Name="GetArtButton" Style="{StaticResource GhostButton}"
+                                            Content="GET COVER ART" Margin="8,0,0,0"
+                                            Click="GetArt_Click" />
+                                    <TextBlock x:Name="LibraryCount" Style="{StaticResource Mono}"
+                                               VerticalAlignment="Center" Margin="14,0,0,0" />
+                                </StackPanel>
+
+                                <!--
+                                    A grid of 2:3 portrait tiles at the ratio stores publish
+                                    their art in, so real covers fill the frame exactly and
+                                    never letterbox. The chrome recedes deliberately: the box
+                                    art supplies all the colour on this page, and the instrument
+                                    shell is just the rack it sits in.
+                                -->
+                                <ItemsControl x:Name="LibraryItems" Margin="0,18,0,0">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource TileButton}"
+                                                    Click="Tile_Click"
+                                                    Tag="{Binding}"
+                                                    ToolTip="{Binding Name}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock x:Name="LibraryEmpty" Style="{StaticResource BodyText}"
+                                           Margin="0,18,0,0" Visibility="Collapsed" />
                             </StackPanel>
+                        </ScrollViewer>
 
-                            <ItemsControl x:Name="LibraryItems" Margin="0,18,0,0" />
+                        <!--
+                            The launch tray. Picking a tile is free; this is where the
+                            consequences live. It states what will happen to the machine
+                            immediately next to the control that causes it, rather than leaving
+                            a click on box art to silently reconfigure a CPU.
+                        -->
+                        <Border x:Name="LaunchTray" Grid.Row="1" Visibility="Collapsed"
+                                Background="{StaticResource Sunk}"
+                                BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
+                                Padding="26,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                            <TextBlock x:Name="LibraryEmpty" Style="{StaticResource BodyText}"
-                                       Margin="0,18,0,0" Visibility="Collapsed" />
-                        </StackPanel>
-                    </ScrollViewer>
+                                <Border x:Name="TrayThumb" Grid.Column="0" Width="38" Height="57"
+                                        CornerRadius="3" ClipToBounds="True"
+                                        VerticalAlignment="Center"
+                                        BorderBrush="{StaticResource Line}" BorderThickness="1">
+                                    <Grid>
+                                        <TextBlock x:Name="TrayInitial"
+                                                   FontFamily="{StaticResource Display}"
+                                                   FontSize="20" FontWeight="Bold"
+                                                   Foreground="#33FFFFFF"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                        <Image x:Name="TrayCover" Stretch="UniformToFill"
+                                               RenderOptions.BitmapScalingMode="HighQuality" />
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                            Margin="14,0,18,0">
+                                    <TextBlock x:Name="TraySource" Style="{StaticResource Eyebrow}"
+                                               Margin="0,0,0,3" />
+                                    <TextBlock x:Name="TrayName" Style="{StaticResource H2}"
+                                               FontSize="15" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="TrayNote" Style="{StaticResource BodyText}"
+                                               FontSize="12" Margin="0,4,0,0" />
+                                </StackPanel>
+
+                                <Button Grid.Column="2" Style="{StaticResource GhostButton}"
+                                        Content="CLEAR" VerticalAlignment="Center"
+                                        Margin="0,0,10,0" Click="ClearSelection_Click" />
+
+                                <Button x:Name="LaunchButton" Grid.Column="3"
+                                        Style="{StaticResource LaunchButton}"
+                                        Content="LAUNCH" VerticalAlignment="Center"
+                                        Click="Launch_Click" />
+                            </Grid>
+                        </Border>
+                    </Grid>
 
                     <!-- ============ Your machine ============ -->
                     <ScrollViewer x:Name="PageMachine" VerticalScrollBarVisibility="Auto"
@@ -375,6 +462,20 @@
                                                        Text="Skip the switch. Rebooting still undoes everything." />
                                         </StackPanel>
                                         <CheckBox x:Name="OptArmOnLaunch" Style="{StaticResource Switch}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Click="Setting_Changed" />
+                                    </Grid>
+
+                                    <Rectangle Height="1" Fill="{StaticResource LineSoft}" Margin="0,14,0,14" />
+
+                                    <Grid>
+                                        <StackPanel Margin="0,0,70,0">
+                                            <TextBlock Style="{StaticResource H2}" FontSize="13.5"
+                                                       Text="Download missing cover art" />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Text="The only thing in GamerGod that uses the internet, and it is off until you switch it on. It asks a public store CDN for one image per game, by store id, with no account and no identifier attached — then keeps the file so it never asks again. Turning this off stops all outbound traffic; art already downloaded stays." />
+                                        </StackPanel>
+                                        <CheckBox x:Name="OptCoverArt" Style="{StaticResource Switch}"
                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
                                                   Click="Setting_Changed" />
                                     </Grid>

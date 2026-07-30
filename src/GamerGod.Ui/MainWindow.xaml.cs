@@ -15,6 +15,7 @@ using GamerGod.Core.Mutations;
 using GamerGod.Core.Policy;
 using GamerGod.Core.Safety;
 using GamerGod.Ui.Audio;
+using GamerGod.Ui.Library;
 using GamerGod.Ui.Settings;
 using GamerGod.Windows;
 
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
     private CpuTopology? _topology;
     private bool _loading = true;
     private bool _libraryLoaded;
+    private GameTile? _selected;
 
     public MainWindow()
     {
@@ -353,6 +355,7 @@ public partial class MainWindow : Window
 
     private async Task LoadLibraryAsync()
     {
+        ClearSelection();
         LibraryItems.Items.Clear();
         LibraryEmpty.Visibility = Visibility.Collapsed;
         LibraryCount.Text = "scanning…";
@@ -390,117 +393,260 @@ public partial class MainWindow : Window
 
         foreach (var game in games)
         {
-            LibraryItems.Items.Add(BuildGameCard(game));
+            LibraryItems.Items.Add(GameTile.From(game));
+        }
+
+        UpdateLibraryBlurb();
+
+        // Only if the user has already said yes. The first fetch is always a button press.
+        if (_settings.FetchCoverArt)
+        {
+            await FetchMissingCoversAsync();
         }
     }
 
-    private Border BuildGameCard(GameEntry game)
+    // ---- selection --------------------------------------------------------
+
+    /// <summary>
+    /// A tile press selects; it never launches.
+    ///
+    /// <para>
+    /// Clicking box art is the most obvious thing to do on this page, and it used to start a
+    /// game and silently reconfigure the CPU underneath it. Both of those are worth a
+    /// deliberate second press, so the tile only ever picks a title and the tray states the
+    /// consequences next to the control that causes them.
+    /// </para>
+    /// </summary>
+    private void Tile_Click(object sender, RoutedEventArgs e)
     {
-        var isEmulator = game.Source == GameSource.Emulator;
-        var accent = (Brush)FindResource(isEmulator ? "Trace" : "Signal");
-
-        var head = new StackPanel { Orientation = Orientation.Horizontal };
-        head.Children.Add(Chip(game.SourceLabel.ToUpperInvariant(), accent, filled: false));
-        head.Children.Add(new TextBlock
-        {
-            Text = game.Name,
-            Style = (Style)FindResource("H2"),
-            FontSize = 14,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-
-        var body = new StackPanel();
-        body.Children.Add(head);
-
-        if (!game.Systems.IsDefaultOrEmpty)
-        {
-            body.Children.Add(new TextBlock
-            {
-                Text = string.Join("  ·  ", game.Systems),
-                Style = (Style)FindResource("Mono"),
-                Margin = new Thickness(0, 6, 0, 0),
-            });
-        }
-
-        // Emulators carry no anti-cheat, so every lever is available to them. Saying so is
-        // useful: it is the one place GamerGod can do its most aggressive work safely.
-        body.Children.Add(new TextBlock
-        {
-            Text = isEmulator
-                ? "No anti-cheat, so GamerGod can use every lever on this."
-                : "Game Mode turns on, then your store launches it.",
-            Style = (Style)FindResource("BodyText"),
-            FontSize = 12,
-            Margin = new Thickness(0, 6, 0, 0),
-        });
-
-        var play = new Button
-        {
-            Style = (Style)FindResource("GhostButton"),
-            Content = "PLAY",
-            Padding = new Thickness(18, 8, 18, 8),
-            VerticalAlignment = VerticalAlignment.Center,
-            Tag = game,
-        };
-        play.Click += Play_Click;
-
-        var layout = new Grid();
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        body.Margin = new Thickness(0, 0, 16, 0);
-        Grid.SetColumn(body, 0);
-        Grid.SetColumn(play, 1);
-        layout.Children.Add(body);
-        layout.Children.Add(play);
-
-        return new Border
-        {
-            Style = (Style)FindResource("Card"),
-            Margin = new Thickness(0, 0, 0, 10),
-            Padding = new Thickness(15),
-            Child = layout,
-        };
-    }
-
-    private async void Play_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as Button)?.Tag is not GameEntry game)
+        if ((sender as Button)?.Tag is not GameTile tile)
         {
             return;
         }
 
-        // Arm first, then launch. The other order would start the game onto a machine that is
-        // still busy, which is the moment the confinement is most worth having.
-        if (MasterSwitch.IsChecked != true)
+        Tick();
+
+        if (ReferenceEquals(_selected, tile))
         {
-            MasterSwitch.IsChecked = true;
-            await ApplyAsync(turnOn: true);
+            ClearSelection();
+            return;
         }
+
+        Select(tile);
+    }
+
+    private void Select(GameTile tile)
+    {
+        if (_selected is not null)
+        {
+            _selected.IsSelected = false;
+        }
+
+        _selected = tile;
+        tile.IsSelected = true;
+
+        TrayThumb.Background = tile.Fallback;
+        TrayInitial.Text = tile.Initial;
+        TrayCover.Source = tile.Cover;
+        TrayCover.Visibility = tile.HasCover ? Visibility.Visible : Visibility.Collapsed;
+
+        TraySource.Text = tile.SourceLabel;
+        TrayName.Text = tile.Name;
+        TrayNote.Text = MasterSwitch.IsChecked == true
+            ? "Game Mode is already on. Launching hands off to "
+              + $"{tile.Entry.SourceLabel} so the game starts the way it expects."
+            : "Launching turns Game Mode on first, then hands off to "
+              + $"{tile.Entry.SourceLabel}. Rebooting undoes everything either way.";
+
+        LaunchTray.Visibility = Visibility.Visible;
+    }
+
+    private void ClearSelection()
+    {
+        if (_selected is not null)
+        {
+            _selected.IsSelected = false;
+            _selected = null;
+        }
+
+        // Released so a large decoded bitmap is not held alive by a hidden tray.
+        TrayCover.Source = null;
+        LaunchTray.Visibility = Visibility.Collapsed;
+    }
+
+    private void ClearSelection_Click(object sender, RoutedEventArgs e)
+    {
+        Tick();
+        ClearSelection();
+    }
+
+    private async void Launch_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected is not { } tile)
+        {
+            return;
+        }
+
+        var game = tile.Entry;
+        LaunchButton.IsEnabled = false;
 
         try
         {
-            // UseShellExecute so a steam:// or com.epicgames.launcher:// URI reaches its handler.
-            // Launching a store title's executable directly is how third-party launchers break
-            // cloud saves and anti-cheat bootstrapping.
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(game.LaunchTarget)
+            // Arm first, then launch. The other order would start the game onto a machine that
+            // is still busy, which is the moment the confinement is most worth having.
+            if (MasterSwitch.IsChecked != true)
             {
-                UseShellExecute = true,
-            });
+                MasterSwitch.IsChecked = true;
+                await ApplyAsync(turnOn: true);
+            }
 
-            _sounds.Play(UiSound.Confirm);
+            var armed = MasterSwitch.IsChecked == true;
+
+            try
+            {
+                // UseShellExecute so a steam:// or com.epicgames.launcher:// URI reaches its
+                // handler. Launching a store title's executable directly is how third-party
+                // launchers break cloud saves and anti-cheat bootstrapping.
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo(game.LaunchTarget)
+                    {
+                        UseShellExecute = true,
+                    });
+
+                _sounds.Play(UiSound.Confirm);
+
+                // Says which of the two things happened rather than assuming both did — the
+                // preview dialog can be declined, and then the game starts unarmed.
+                TrayNote.Text = armed
+                    ? $"Game Mode is on and {game.SourceLabel} has been asked to start this."
+                    : $"{game.SourceLabel} has been asked to start this. Game Mode was not "
+                      + "turned on, so nothing on your machine has changed.";
+            }
+            catch (Exception ex)
+            {
+                _sounds.Play(UiSound.Alert);
+                MessageBox.Show(
+                    $"Could not launch {game.Name}.\n\n{ex.Message}\n\n"
+                    + (armed
+                        ? "Game Mode is still on — turn it off here, run 'gamergod off', or reboot."
+                        : "Nothing on your machine was changed."),
+                    "GamerGod",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
         }
-        catch (Exception ex)
+        finally
         {
-            _sounds.Play(UiSound.Alert);
-            MessageBox.Show(
-                $"Could not launch {game.Name}.\n\n{ex.Message}\n\n"
-                + "Game Mode is still on — 'gamergod off' or rebooting undoes it.",
-                "GamerGod",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            LaunchButton.IsEnabled = true;
         }
+    }
+
+    // ---- cover art --------------------------------------------------------
+
+    /// <summary>
+    /// The explicit initiation Charter Article IV requires. Nothing downloads until this is
+    /// pressed and the dialog it raises is accepted, and the preference it sets is the only
+    /// thing that lets later refreshes fetch without asking again.
+    /// </summary>
+    private async void GetArt_Click(object sender, RoutedEventArgs e)
+    {
+        Tick();
+
+        if (!_settings.FetchCoverArt)
+        {
+            var consent = MessageBox.Show(
+                "GamerGod can download the missing box art from the same public store CDN your "
+                + "game client uses.\n\n"
+                + "This is the only feature that uses the internet. If you say yes:\n\n"
+                + "  · one image is requested per game, by its numeric store id\n"
+                + "  · no account, cookie, or identifier is attached\n"
+                + "  · nothing about your machine, your settings, or your usage is sent\n"
+                + "  · each image is saved locally, so it is requested exactly once\n\n"
+                + "You can turn this back off in Settings at any time.\n\n"
+                + "Download cover art?",
+                "GamerGod",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+
+            if (consent != MessageBoxResult.OK)
+            {
+                return;
+            }
+
+            _settings = _settings with { FetchCoverArt = true };
+            _settings.Save();
+            OptCoverArt.IsChecked = true;
+            UpdateLibraryBlurb();
+        }
+
+        await FetchMissingCoversAsync();
+    }
+
+    private async Task FetchMissingCoversAsync()
+    {
+        var tiles = LibraryItems.Items.OfType<GameTile>().Where(t => !t.HasCover).ToImmutableArray();
+
+        if (tiles.IsEmpty)
+        {
+            return;
+        }
+
+        GetArtButton.IsEnabled = false;
+        var previous = LibraryCount.Text;
+        LibraryCount.Text = $"fetching art for {tiles.Length}…";
+
+        var found = 0;
+
+        try
+        {
+            // Sequential on purpose. A handful of images is not worth saturating a connection
+            // somebody may be gaming on, and the tiles fill in visibly one at a time.
+            foreach (var tile in tiles)
+            {
+                if (await tile.TryFetchCoverAsync(default))
+                {
+                    found++;
+
+                    if (ReferenceEquals(_selected, tile))
+                    {
+                        TrayCover.Source = tile.Cover;
+                        TrayCover.Visibility = Visibility.Visible;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            GetArtButton.IsEnabled = true;
+
+            // The count of what was actually found, not of what was attempted. Plenty of app
+            // ids — demos, tools, delisted titles — have no published portrait art at all.
+            LibraryCount.Text = found == 0
+                ? previous + "  ·  no art published for the remaining " + tiles.Length
+                : previous + $"  ·  found art for {found} of {tiles.Length}";
+        }
+    }
+
+    /// <summary>
+    /// The page's own description of itself has to change when the network preference does,
+    /// or it becomes a false claim printed above the button that falsifies it.
+    /// </summary>
+    private void UpdateLibraryBlurb()
+    {
+        LibraryBlurb.Text = _settings.FetchCoverArt
+            ? "Found by reading what your stores already keep on disk — no account is touched "
+              + "and nothing about your machine is sent anywhere. Cover art downloading is on, "
+              + "so missing art is fetched once per game from a public store CDN. Launching a "
+              + "game turns Game Mode on first, then hands off to the store."
+            : "Found by reading what your stores already keep on disk. Nothing is scraped, no "
+              + "account is touched, and nothing leaves this machine. Games your store has not "
+              + "cached art for get a generated tile — or press Get Cover Art to download the "
+              + "real thing. Launching a game turns Game Mode on first, then hands off to the "
+              + "store.";
+
+        GetArtButton.Visibility = LibraryItems.Items.OfType<GameTile>().Any(t => !t.HasCover)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     // ---------------------------------------------------------------- scan
@@ -611,6 +757,9 @@ public partial class MainWindow : Window
 
         OptConfirm.IsChecked = _settings.ConfirmBeforeApplying;
         OptArmOnLaunch.IsChecked = _settings.ArmOnLaunch;
+        OptCoverArt.IsChecked = _settings.FetchCoverArt;
+
+        UpdateLibraryBlurb();
     }
 
     private void Setting_Changed(object sender, RoutedEventArgs e)
@@ -629,9 +778,11 @@ public partial class MainWindow : Window
             SoundOnNavigation = OptNavSound.IsChecked == true,
             ConfirmBeforeApplying = OptConfirm.IsChecked == true,
             ArmOnLaunch = OptArmOnLaunch.IsChecked == true,
+            FetchCoverArt = OptCoverArt.IsChecked == true,
         };
 
         _settings.Save();
+        UpdateLibraryBlurb();
         _sounds.Play(UiSound.Confirm);
     }
 

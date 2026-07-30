@@ -155,6 +155,45 @@
         </Setter>
     </Style>
 
+    <!--
+        The only filled control in the application. Amber is the arming colour everywhere else
+        in this interface, and it is spent here on purpose: pressing this changes the machine
+        and then starts a game. If a second button ever wants this style, one of them is lying
+        about its importance.
+    -->
+    <Style x:Key="LaunchButton" TargetType="Button">
+        <Setter Property="FontFamily" Value="{StaticResource Display}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="#0A0C11" />
+        <Setter Property="Padding" Value="26,10" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" CornerRadius="3"
+                            Background="{StaticResource Signal}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="#FFC978" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="#E09A3C" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Line}" />
+                            <Setter Property="Foreground" Value="{StaticResource InkFaint}" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Window chrome buttons: minimal, and never amber - they are not the point of the page. -->
     <Style x:Key="ChromeButton" TargetType="Button">
         <Setter Property="Width" Value="44" />
@@ -256,6 +295,123 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- ============================ Library tile ========================
+         The one piece of this interface that is allowed to be exuberant, because the art is
+         doing it rather than the chrome. Hover lifts the tile, brightens the cover and sweeps
+         an amber line along the bottom edge - a slot arming, which is the same idea as the
+         on/off tones.
+    -->
+    <Style x:Key="TileButton" TargetType="Button">
+        <Setter Property="Width" Value="168" />
+        <Setter Property="Height" Value="252" />
+        <Setter Property="Margin" Value="0,0,14,14" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Root" Margin="0,4,0,0">
+
+                        <!-- Art, or a generated stand-in that is meant to look designed. -->
+                        <Border x:Name="Frame" CornerRadius="4" ClipToBounds="True"
+                                Background="{Binding Fallback}"
+                                BorderBrush="{StaticResource Line}" BorderThickness="1">
+                            <Grid>
+                                <TextBlock Text="{Binding Initial}"
+                                           FontFamily="{StaticResource Display}"
+                                           FontSize="72" FontWeight="Bold"
+                                           Foreground="#26FFFFFF"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+
+                                <Image x:Name="Cover" Source="{Binding Cover}"
+                                       Stretch="UniformToFill"
+                                       RenderOptions.BitmapScalingMode="HighQuality" />
+
+                                <!-- Scrim so the title stays readable over any artwork. -->
+                                <Border VerticalAlignment="Bottom" Height="96">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#000A0C11" Offset="0" />
+                                            <GradientStop Color="#E60A0C11" Offset="0.75" />
+                                            <GradientStop Color="#F50A0C11" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+
+                                <StackPanel VerticalAlignment="Bottom" Margin="11,0,11,11">
+                                    <TextBlock Text="{Binding SourceLabel}"
+                                               FontFamily="{StaticResource Display}"
+                                               FontSize="9" Foreground="{StaticResource InkFaint}"
+                                               Margin="0,0,0,3" />
+                                    <TextBlock Text="{Binding Name}"
+                                               FontFamily="{StaticResource Display}"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{StaticResource Ink}"
+                                               TextTrimming="CharacterEllipsis"
+                                               MaxHeight="34" TextWrapping="Wrap" />
+                                </StackPanel>
+
+                                <!-- The arming line. Hidden until hover. -->
+                                <Rectangle x:Name="Signal" Height="3" VerticalAlignment="Bottom"
+                                           Fill="{StaticResource Signal}" Opacity="0" />
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="Glow" CornerRadius="4" BorderThickness="1"
+                                BorderBrush="{StaticResource Signal}" Opacity="0"
+                                IsHitTestVisible="False" />
+                    </Grid>
+
+                    <ControlTemplate.Triggers>
+                        <!-- No Source means no art anywhere, so the generated tile shows through. -->
+                        <DataTrigger Binding="{Binding HasCover}" Value="False">
+                            <Setter TargetName="Cover" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Glow" Property="Opacity" Value="1" />
+                            <Setter TargetName="Signal" Property="Opacity" Value="1" />
+                            <Setter TargetName="Root" Property="Margin" Value="0,0,0,4" />
+                            <Setter TargetName="Cover" Property="Opacity" Value="1" />
+                        </Trigger>
+
+                        <!--
+                            Selection outranks hover, and holds when the pointer leaves.
+                            Clicking a tile picks it; it never starts anything. The launch
+                            control lives in the tray below, where it can say what it will do
+                            to the machine before it does it.
+                        -->
+                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                            <Setter TargetName="Glow" Property="Opacity" Value="1" />
+                            <Setter TargetName="Glow" Property="BorderThickness" Value="2" />
+                            <Setter TargetName="Signal" Property="Opacity" Value="1" />
+                            <Setter TargetName="Cover" Property="Opacity" Value="1" />
+                        </DataTrigger>
+
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Glow" Property="Opacity" Value="1" />
+                            <Setter TargetName="Signal" Property="Opacity" Value="1" />
+                        </Trigger>
+
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Root" Property="Margin" Value="0,4,0,0" />
+                            <Setter TargetName="Frame" Property="Opacity" Value="0.85" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+
+        <Style.Resources>
+            <!-- Art sits slightly dimmed at rest so hover reads as the tile waking up. -->
+            <Style TargetType="Image">
+                <Setter Property="Opacity" Value="0.86" />
+            </Style>
+        </Style.Resources>
     </Style>
 
     <Style x:Key="Slider" TargetType="Slider">

@@ -60,6 +60,50 @@ public sealed record JournalEntry
     public string? Error { get; init; }
 
     public string? Description { get; init; }
+
+    /// <summary>
+    /// When the machine this session started on last booted, in UTC ticks. Recorded on
+    /// <see cref="JournalOp.SessionBegin"/> and zero elsewhere.
+    ///
+    /// <para>
+    /// This is what makes "just reboot" true in the interface as well as on the machine. Every
+    /// change GamerGod makes to a process — efficiency mode, processor affinity — dies with
+    /// that process, so a restart undoes all of it without any code running. But the journal
+    /// is a file and files survive restarts, so without this the ledger reads captures with no
+    /// matching reverts and reports Game Mode as still on. The machine is fine; the report is
+    /// wrong, which is arguably worse, because it makes the guarantee look broken.
+    /// </para>
+    /// </summary>
+    public long MachineBootedAtUtcTicks { get; init; }
+}
+
+/// <summary>
+/// When this machine last booted.
+///
+/// <para>
+/// Derived from the system's uptime counter rather than a WMI query, so it needs no P/Invoke
+/// and stays in Core where the ledger can be tested against a fake clock.
+/// </para>
+/// </summary>
+public static class MachineBoot
+{
+    /// <summary>
+    /// Sleep and hibernate perturb the uptime counter slightly, so two readings taken within
+    /// the same boot can differ by seconds. A generous window avoids treating that drift as a
+    /// restart, which would discard a live session's journal.
+    /// </summary>
+    public static readonly TimeSpan Tolerance = TimeSpan.FromMinutes(2);
+
+    public static DateTimeOffset At() =>
+        DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
+
+    /// <summary>
+    /// True when the machine has restarted since a session began — in which case every change
+    /// that could not survive a reboot is already gone.
+    /// </summary>
+    public static bool RestartedSince(long sessionBootTicks, DateTimeOffset now) =>
+        sessionBootTicks > 0
+        && now - new DateTimeOffset(sessionBootTicks, TimeSpan.Zero) > Tolerance;
 }
 
 /// <summary>

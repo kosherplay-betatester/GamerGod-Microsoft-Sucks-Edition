@@ -61,6 +61,19 @@ public sealed record UiSettings
     /// <summary>Turn Game Mode on as soon as GamerGod starts.</summary>
     public bool ArmOnLaunch { get; init; }
 
+    /// <summary>
+    /// Allow art for titles whose store cached none locally to be downloaded from that store's
+    /// public CDN.
+    ///
+    /// <para>
+    /// Off by default, and it is the only preference in this file that can cause a packet to
+    /// leave the machine. Charter Article IV permits outbound connections the user explicitly
+    /// initiated, which is what setting this is — so it is never inferred, never defaulted on,
+    /// and never re-enabled by an upgrade.
+    /// </para>
+    /// </summary>
+    public bool FetchCoverArt { get; init; }
+
     // ---- Overlay ------------------------------------------------------
 
     /// <summary>Off by default, per the design. It is opt-in and instant either way.</summary>

@@ -84,6 +84,11 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
                 Op = JournalOp.SessionBegin,
                 SessionId = sessionId,
                 Description = permit.Explain(),
+
+                // Stamped so a later read can tell whether the machine has restarted since.
+                // Without it the journal outlives a reboot and reports changes as still
+                // applied when the operating system already discarded every one of them.
+                MachineBootedAtUtcTicks = MachineBoot.At().UtcTicks,
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -179,12 +184,22 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
         // ledger exists to prevent. Once a key is fully reverted its record is dropped, so
         // a later capture correctly becomes the new original.
         var captures = new Dictionary<string, JournalEntry>(StringComparer.Ordinal);
+        var restarted = RestartedSessions(entries);
 
         foreach (var entry in entries)
         {
             switch (entry.Op)
             {
                 case JournalOp.Capture:
+                    // A change that cannot survive a reboot, from a session that predates the
+                    // current boot, is already undone - Windows did it when the process died.
+                    // Trying to "restore" it now would target process ids that belong to
+                    // something else entirely.
+                    if (!entry.IsBootPersistent && restarted.Contains(entry.SessionId))
+                    {
+                        break;
+                    }
+
                     if (!captures.ContainsKey(entry.Key))
                     {
                         captures[entry.Key] = entry;
@@ -279,13 +294,18 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
     public async ValueTask<bool> HasOutstandingChangesAsync(CancellationToken cancellationToken = default)
     {
         var entries = await _journal.ReadAllAsync(cancellationToken).ConfigureAwait(false);
+        var restarted = RestartedSessions(entries);
 
         var outstanding = new HashSet<string>(StringComparer.Ordinal);
+
         foreach (var entry in entries)
         {
             if (entry.Op == JournalOp.Capture)
             {
-                outstanding.Add(entry.Key);
+                if (entry.IsBootPersistent || !restarted.Contains(entry.SessionId))
+                {
+                    outstanding.Add(entry.Key);
+                }
             }
             else if (entry.Op == JournalOp.Reverted)
             {
@@ -294,6 +314,34 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
         }
 
         return outstanding.Count > 0;
+    }
+
+    /// <summary>
+    /// Sessions that began before the machine's current boot.
+    ///
+    /// <para>
+    /// Everything they changed about a process is already undone, because the processes
+    /// themselves are gone. Recognising that is what keeps the interface honest after a
+    /// restart: without it the journal survives the reboot, the ledger sees captures with no
+    /// matching reverts, and GamerGod announces that Game Mode is still on while the machine
+    /// is in fact untouched.
+    /// </para>
+    /// </summary>
+    private static HashSet<string> RestartedSessions(ImmutableArray<JournalEntry> entries)
+    {
+        var now = MachineBoot.At();
+        var restarted = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var entry in entries)
+        {
+            if (entry.Op == JournalOp.SessionBegin
+                && MachineBoot.RestartedSince(entry.MachineBootedAtUtcTicks, now))
+            {
+                restarted.Add(entry.SessionId);
+            }
+        }
+
+        return restarted;
     }
 
     private ValueTask AppendFailure(
