@@ -75,13 +75,13 @@ try
                 return 0;
             }
 
-            // Applying and reverting real machine state arrives with the engine. Until then,
-            // claiming a successful restore would be a lie the uninstaller would act on.
-            Console.Error.WriteLine(
-                "Journals are present but the restore engine is not in this build.");
-            Console.Error.WriteLine(
-                "Reboot to restore the machine - every GamerGod change is undone at boot by design.");
-            return 1;
+            // This used to report that "the restore engine is not in this build" and exit 1.
+            // It was true when written and stopped being true the moment OffAsync landed —
+            // the engine is the same one, a few lines below in this file. The uninstaller runs
+            // this first and refuses to continue when it fails, so the effect of the stale
+            // message was that uninstalling with Game Mode on told the user their machine
+            // could not be restored, by a build that could restore it.
+            return await SessionCommands.OffAsync();
         }
 
         case "help":

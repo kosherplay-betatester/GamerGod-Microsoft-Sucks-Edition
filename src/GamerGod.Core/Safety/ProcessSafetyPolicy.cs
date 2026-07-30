@@ -26,6 +26,19 @@ public enum ProcessRisk
     /// <summary>Suspending it drops the user out of a voice call mid-match.</summary>
     Communication,
 
+    /// <summary>
+    /// Touching it at all drops frames on a live broadcast.
+    ///
+    /// <para>
+    /// The one category where demotion is <em>not</em> the safe alternative. A live encoder is
+    /// soft-real-time work with an audience on the other end: moving it off the game's die or
+    /// marking it efficiency work makes it miss its deadline, and a missed encoder deadline is
+    /// a dropped frame on somebody's stream that no amount of later CPU recovers. A recorded
+    /// file can be re-encoded; a broadcast cannot be re-sent.
+    /// </para>
+    /// </summary>
+    Broadcast,
+
     /// <summary>Suspending it breaks GamerGod's own recovery.</summary>
     Recovery,
 }
@@ -43,9 +56,12 @@ public sealed record ProcessProtection(string Process, ProcessRisk Risk, string 
 /// </para>
 ///
 /// <para>
-/// Demotion is always available as the safer alternative. A process that must not be
+/// Demotion is the safer alternative for most of this list: a process that must not be
 /// suspended can still be moved to the ambient domain and marked as efficiency work, which
-/// recovers most of the benefit with none of the risk.
+/// recovers most of the benefit with none of the risk. <b>Broadcast is the exception</b> —
+/// a live encoder misses its deadline when demoted, and a missed deadline is a dropped frame
+/// on somebody's stream. Everything named here is excluded from all three levers, not only
+/// from suspension.
 /// </para>
 /// </summary>
 public static class ProcessSafetyPolicy
@@ -237,6 +253,37 @@ public static class ProcessSafetyPolicy
 
         // ---- Communication. Suspending these drops the user mid-match.
         Communication("discord", "Discord. Suspending it drops an active voice call."),
+
+        // ---- Broadcast.
+        //
+        // Added after the question "does this work for streamers" was asked directly, and the
+        // answer turned out to be no. The list already protected remote-play and VR streaming
+        // hosts — Sunshine, GameStream, Steam Remote Play, ALVR — which look adjacent and are
+        // not: those carry a picture to a screen in the next room, and dropping a frame costs
+        // one frame. Broadcast software carries a picture to an audience, and a dropped frame
+        // is gone from the recording of a live event.
+        //
+        // The distinction that matters: for everything above, demotion is the safe alternative
+        // to suspension. For these it is not. Confining a 1080p60 encoder to the background
+        // domain and marking it efficiency work is how a stream starts skipping while the
+        // game's own frame rate looks fine — the exact failure a streamer would blame on
+        // their encoder settings and never trace back here.
+        Broadcast("obs64", "OBS Studio. Encoding a live stream; moving or demoting it drops frames on air."),
+        Broadcast("obs32", "OBS Studio, 32-bit. Same live encoder, same dropped frames."),
+        Broadcast("obs-ffmpeg-mux", "OBS's muxer, which writes the outgoing stream. Stalling it corrupts the output."),
+        Broadcast("streamlabs obs", "Streamlabs. Live encoder."),
+        Broadcast("streamlabs desktop", "Streamlabs Desktop. Live encoder."),
+        Broadcast("xsplit.core", "XSplit Broadcaster core."),
+        Broadcast("xsplit.broadcaster", "XSplit Broadcaster. Live encoder feeding a stream."),
+        Broadcast("twitch studio", "Twitch Studio. Live encoder."),
+        Broadcast("vmix64", "vMix. Live production and encoding."),
+        Broadcast("wirecast", "Wirecast. Live encoder."),
+        Broadcast("nvidia share", "NVIDIA ShadowPlay, which records and streams gameplay."),
+        Broadcast("amdow", "AMD ReLive overlay, which records and streams gameplay."),
+        Broadcast("streamdeck", "Elgato Stream Deck. Drives scene changes during a live show."),
+        Broadcast("4kcaptureutility", "Elgato capture card software."),
+        Broadcast("game capture hd", "Elgato Game Capture, which records from a capture card in real time."),
+        Broadcast("restreamchat", "Restream Chat, read on air."),
         Communication("teamspeak", "TeamSpeak."),
         Communication("mumble", "Mumble."),
         Communication("ts3client_win64", "TeamSpeak 3."),
@@ -345,6 +392,9 @@ public static class ProcessSafetyPolicy
 
     private static ProcessProtection Communication(string p, string why) =>
         new(p, ProcessRisk.Communication, why);
+
+    private static ProcessProtection Broadcast(string p, string why) =>
+        new(p, ProcessRisk.Broadcast, why);
 
     private static ProcessProtection Recovery(string p, string why) => new(p, ProcessRisk.Recovery, why);
 }
