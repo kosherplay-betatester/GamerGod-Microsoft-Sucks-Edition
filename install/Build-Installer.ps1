@@ -29,6 +29,23 @@ $artifacts = Join-Path $root 'artifacts'
 function Step { param([string] $Text) Write-Host "`n  $Text" -ForegroundColor Cyan }
 
 Step 'Cleaning previous payload'
+
+# Testing a build means running it, and a running build holds its own files open. Without
+# this the clean fails on clrjit.dll with a bare access-denied that says nothing about the
+# cause - which is the least useful possible way to learn you left the app open.
+#
+# Wrapped in @() because Set-StrictMode -Version Latest refuses .Count on the bare object a
+# single match unrolls to - and one match is by far the likeliest case here.
+$running = @(Get-Process -Name 'GamerGod', 'gamergod' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($payload, [StringComparison]::OrdinalIgnoreCase) })
+
+if ($running.Count -gt 0) {
+    $plural = if ($running.Count -eq 1) { 'process' } else { 'processes' }
+    Write-Host "  Closing $($running.Count) $plural running from the payload" -ForegroundColor Yellow
+    $running | Stop-Process -Force
+    $running | Wait-Process -Timeout 10 -ErrorAction SilentlyContinue
+}
+
 if (Test-Path $payload) { Remove-Item $payload -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $payload | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'installer') | Out-Null
