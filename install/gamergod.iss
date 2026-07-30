@@ -44,7 +44,14 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 MinVersion=10.0.17763
-UninstallDisplayIcon={app}\{#CliExe}
+
+; The mark, on the setup executable itself. Without this Inno stamps its own default, which
+; is the first thing anyone sees of this product and says nothing about it.
+SetupIconFile=gamergod.ico
+
+; Points at the desktop app rather than the command-line tool: this is the icon Windows shows
+; in Installed apps, and the app is what a player recognises.
+UninstallDisplayIcon={app}\app\GamerGod.exe
 UninstallDisplayName={#AppName} {#AppVersion}
 
 [Languages]

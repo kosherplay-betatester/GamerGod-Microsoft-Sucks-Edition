@@ -555,10 +555,12 @@ public partial class MainWindow : Window
         if (!_settings.FetchCoverArt)
         {
             var consent = MessageBox.Show(
-                "GamerGod can download the missing box art from the same public store CDN your "
-                + "game client uses.\n\n"
+                "GamerGod can download the missing box art from the same public store servers "
+                + "your game client uses.\n\n"
                 + "This is the only feature that uses the internet. If you say yes:\n\n"
-                + "  · one image is requested per game, by its numeric store id\n"
+                + "  · art is requested by numeric store id — one image per game\n"
+                + "  · for a game with no cover published, the store is asked where its\n"
+                + "    header art lives, then that image is fetched\n"
                 + "  · no account, cookie, or identifier is attached\n"
                 + "  · nothing about your machine, your settings, or your usage is sent\n"
                 + "  · each image is saved locally, so it is requested exactly once\n\n"

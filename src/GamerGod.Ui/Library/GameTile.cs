@@ -66,10 +66,24 @@ public sealed class GameTile : INotifyPropertyChanged
             _cover = value;
             Raise();
             Raise(nameof(HasCover));
+            Raise(nameof(IsBanner));
         }
     }
 
     public bool HasCover => Cover is not null;
+
+    /// <summary>
+    /// True when the only art available is landscape, which changes how the tile draws it.
+    ///
+    /// <para>
+    /// Plenty of publishers never upload a portrait capsule — Battlefield 6 is one — so all
+    /// that exists is a 460x215 header. Cropping that to fill a 2:3 frame keeps about a third
+    /// of its width and throws away the title treatment, which is the part worth seeing. Shown
+    /// whole as a band across the tile instead, it reads as a designed card rather than a
+    /// botched crop.
+    /// </para>
+    /// </summary>
+    public bool IsBanner => Cover is { } art && art.Width > art.Height;
 
     /// <summary>Shown when <see cref="Cover"/> is null.</summary>
     public Brush Fallback { get; }

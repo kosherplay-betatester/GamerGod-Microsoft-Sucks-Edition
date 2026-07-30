@@ -331,6 +331,20 @@
                                        Stretch="UniformToFill"
                                        RenderOptions.BitmapScalingMode="HighQuality" />
 
+                                <!--
+                                    Landscape-only art, shown whole rather than cropped. Sits
+                                    high in the frame so the generated gradient below it reads
+                                    as deliberate backing, and hairlines above and below make
+                                    it a band instead of a picture that failed to fill.
+                                -->
+                                <StackPanel x:Name="Banner" VerticalAlignment="Top"
+                                            Margin="0,44,0,0" Visibility="Collapsed">
+                                    <Rectangle Height="1" Fill="#2AFFFFFF" />
+                                    <Image Source="{Binding Cover}" Stretch="Uniform"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                    <Rectangle Height="1" Fill="#2AFFFFFF" />
+                                </StackPanel>
+
                                 <!-- Scrim so the title stays readable over any artwork. -->
                                 <Border VerticalAlignment="Bottom" Height="96">
                                     <Border.Background>
@@ -370,6 +384,15 @@
                         <!-- No Source means no art anywhere, so the generated tile shows through. -->
                         <DataTrigger Binding="{Binding HasCover}" Value="False">
                             <Setter TargetName="Cover" Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+
+                        <!--
+                            Landscape art swaps the fill for the band and keeps the generated
+                            gradient visible behind it, so the initial still anchors the tile.
+                        -->
+                        <DataTrigger Binding="{Binding IsBanner}" Value="True">
+                            <Setter TargetName="Cover" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Banner" Property="Visibility" Value="Visible" />
                         </DataTrigger>
 
                         <Trigger Property="IsMouseOver" Value="True">

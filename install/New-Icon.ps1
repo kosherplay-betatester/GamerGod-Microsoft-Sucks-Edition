@@ -7,9 +7,13 @@
     are synthesised: the repository stays free of assets nobody can review or edit, and the
     mark is tuned by changing a number.
 
-    The mark is the same one in the title bar - an amber G inside a rounded enclosure on a
-    near-black ground. It reads as an instrument panel rather than gamer chrome, which is the
-    whole visual argument of the product, and it stays legible at 16 pixels where a detailed
+    The mark is a stacked GG - one G high and left, a second low and right, overlapping on the
+    diagonal. Two letters carry more of the name than one and the offset gives the mark depth
+    without any illustration: the rear G is hollow and dim so it reads as behind, the front G
+    is solid amber on a gradient so it reads as lit. The enclosure stays a rounded near-black
+    panel, because the visual argument of this product is instrument rather than gamer chrome.
+
+    Everything scales off $Size, so the silhouette holds from 256 down to 16 where a detailed
     illustration would turn to mud.
 #>
 [CmdletBinding()]
@@ -25,8 +29,26 @@ Add-Type -AssemblyName System.Drawing
 $sizes = 16, 20, 24, 32, 40, 48, 64, 96, 128, 256
 
 $ground = [System.Drawing.Color]::FromArgb(255, 10, 12, 17)
+$groundLit = [System.Drawing.Color]::FromArgb(255, 26, 31, 42)
 $signal = [System.Drawing.Color]::FromArgb(255, 255, 180, 84)
+$signalLit = [System.Drawing.Color]::FromArgb(255, 255, 201, 120)
+$signalDeep = [System.Drawing.Color]::FromArgb(255, 224, 154, 60)
 $edge = [System.Drawing.Color]::FromArgb(255, 138, 100, 40)
+$ghost = [System.Drawing.Color]::FromArgb(205, 154, 112, 48)
+
+function New-RoundedPath {
+    param([System.Drawing.RectangleF] $Box, [float] $Radius)
+
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $d = $Radius * 2
+    $path.AddArc($Box.X, $Box.Y, $d, $d, 180, 90)
+    $path.AddArc(($Box.Right - $d), $Box.Y, $d, $d, 270, 90)
+    $path.AddArc(($Box.Right - $d), ($Box.Bottom - $d), $d, $d, 0, 90)
+    $path.AddArc($Box.X, ($Box.Bottom - $d), $d, $d, 90, 90)
+    $path.CloseFigure()
+
+    return $path
+}
 
 function New-Frame {
     param([int] $Size)
@@ -36,48 +58,100 @@ function New-Frame {
 
     $g.SmoothingMode = 'AntiAlias'
     $g.InterpolationMode = 'HighQualityBicubic'
-    $g.TextRenderingHint = 'AntiAliasGridFit'
+    $g.PixelOffsetMode = 'HighQuality'
     $g.Clear([System.Drawing.Color]::Transparent)
 
-    # Rounded enclosure. The radius scales with the icon so the silhouette stays constant.
-    $inset = [math]::Max(1, [int]($Size * 0.06))
-    $radius = [math]::Max(2, [int]($Size * 0.22))
-    $box = New-Object System.Drawing.Rectangle($inset, $inset, ($Size - ($inset * 2)), ($Size - ($inset * 2)))
+    # --- enclosure -----------------------------------------------------
+    $inset = [math]::Max(1.0, $Size * 0.055)
+    $radius = [math]::Max(2.0, $Size * 0.22)
+    $box = New-Object System.Drawing.RectangleF($inset, $inset, ($Size - ($inset * 2)), ($Size - ($inset * 2)))
+    $shell = New-RoundedPath -Box $box -Radius $radius
 
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $d = $radius * 2
-    $path.AddArc($box.X, $box.Y, $d, $d, 180, 90)
-    $path.AddArc(($box.Right - $d), $box.Y, $d, $d, 270, 90)
-    $path.AddArc(($box.Right - $d), ($box.Bottom - $d), $d, $d, 0, 90)
-    $path.AddArc($box.X, ($box.Bottom - $d), $d, $d, 90, 90)
-    $path.CloseFigure()
-
-    $fill = New-Object System.Drawing.SolidBrush($ground)
-    $g.FillPath($fill, $path)
+    # Lit from the top left, which is where every other surface in this interface is lit from.
+    $panel = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+        (New-Object System.Drawing.PointF($box.X, $box.Y)),
+        (New-Object System.Drawing.PointF($box.Right, $box.Bottom)),
+        $groundLit, $ground)
+    $g.FillPath($panel, $shell)
 
     $penWidth = [math]::Max(1.0, $Size * 0.05)
     $pen = New-Object System.Drawing.Pen($edge, $penWidth)
-    $g.DrawPath($pen, $path)
+    $g.DrawPath($pen, $shell)
 
-    # The G. Bahnschrift is the display face used throughout; Segoe UI is the fallback on a
-    # machine that somehow lacks it.
+    # --- the two G's ---------------------------------------------------
+    # Bahnschrift is the display face used throughout; Segoe UI is the fallback on a machine
+    # that somehow lacks it.
     $family = try { New-Object System.Drawing.FontFamily('Bahnschrift') }
               catch { New-Object System.Drawing.FontFamily('Segoe UI') }
 
-    $font = New-Object System.Drawing.Font($family, ($Size * 0.62), [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    # Clipped to the enclosure. Without this the rear G's shoulder pushes through the top-left
+    # corner at every size, and a mark that leaks out of its own frame looks like a mistake.
+    $g.SetClip($shell)
+
+    $bold = [int][System.Drawing.FontStyle]::Bold
 
     $format = New-Object System.Drawing.StringFormat
     $format.Alignment = 'Center'
     $format.LineAlignment = 'Center'
 
-    # Nudged up a fraction: glyph bounding boxes sit low, and centring on the box rather than
-    # on the letter looks off by a pixel at small sizes, which is exactly where it shows.
-    $textBox = New-Object System.Drawing.RectangleF(0, -($Size * 0.04), $Size, $Size)
-    $text = New-Object System.Drawing.SolidBrush($signal)
-    $g.DrawString('G', $font, $text, $textBox, $format)
+    # Glyph bounding boxes sit low, so each centre is nudged up a fraction. Centring on the box
+    # rather than on the letter looks off by a pixel at small sizes - exactly where it shows.
+    $rise = $Size * 0.035
 
-    $text.Dispose(); $font.Dispose(); $family.Dispose()
-    $pen.Dispose(); $fill.Dispose(); $path.Dispose(); $format.Dispose(); $g.Dispose()
+    # Below 32 pixels the pair has about six pixels of glyph each to work with, and two
+    # overlapping G's at that scale are indistinguishable from a smudge. The taskbar and the
+    # window chrome get the single G instead - the same simplification any mark this dense
+    # needs, and the reason to draw the icon in code rather than scale one bitmap down.
+    $stacked = $Size -ge 32
+    $em = if ($stacked) { $Size * 0.42 } else { $Size * 0.62 }
+
+    if ($stacked) {
+        # Rear G: high and left, hollow, so it recedes behind the front one. The offsets are
+        # kept tight; pushed further apart the pair stops reading as one mark and starts
+        # reading as two letters that drifted.
+        $rear = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $rear.AddString('G', $family, $bold, $em,
+            (New-Object System.Drawing.PointF(($Size * 0.405), (($Size * 0.395) - $rise))), $format)
+
+        $ghostPen = New-Object System.Drawing.Pen($ghost, [math]::Max(1.0, $Size * 0.036))
+        $ghostPen.LineJoin = 'Round'
+        $g.DrawPath($ghostPen, $rear)
+        $ghostPen.Dispose()
+        $rear.Dispose()
+    }
+
+    # Front G: low and right when stacked, dead centre when not. Solid, on its own vertical
+    # gradient so it reads as lit rather than flat, and outlined in the ground colour first -
+    # which is what keeps the two legible where they overlap.
+    $frontX = if ($stacked) { $Size * 0.605 } else { $Size * 0.5 }
+    $frontY = if ($stacked) { $Size * 0.615 } else { $Size * 0.5 }
+
+    $front = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $front.AddString('G', $family, $bold, $em,
+        (New-Object System.Drawing.PointF($frontX, ($frontY - $rise))), $format)
+
+    $cutPen = New-Object System.Drawing.Pen($ground, [math]::Max(1.5, $Size * 0.07))
+    $cutPen.LineJoin = 'Round'
+    $g.DrawPath($cutPen, $front)
+
+    $bounds = $front.GetBounds()
+    if ($bounds.Height -gt 0) {
+        $glyph = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+            (New-Object System.Drawing.PointF($bounds.X, ($bounds.Y - 1))),
+            (New-Object System.Drawing.PointF($bounds.X, ($bounds.Bottom + 1))),
+            $signalLit, $signalDeep)
+        $g.FillPath($glyph, $front)
+        $glyph.Dispose()
+    }
+    else {
+        $flat = New-Object System.Drawing.SolidBrush($signal)
+        $g.FillPath($flat, $front)
+        $flat.Dispose()
+    }
+
+    $cutPen.Dispose(); $front.Dispose()
+    $format.Dispose(); $family.Dispose()
+    $pen.Dispose(); $panel.Dispose(); $shell.Dispose(); $g.Dispose()
 
     return $bitmap
 }

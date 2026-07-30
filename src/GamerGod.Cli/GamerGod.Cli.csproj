@@ -7,6 +7,10 @@
     <RootNamespace>GamerGod.Cli</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
 
+    <!-- The same mark as the app. A console tool still shows an icon in Explorer, in a
+         shortcut, and in the Installed apps list. -->
+    <ApplicationIcon>..\..\install\gamergod.ico</ApplicationIcon>
+
     <!--
       AOT compatibility is analysed but not enforced at publish time. Keeping the analyzers
       on is what caught the journal's reflection-based JSON, which would have failed only

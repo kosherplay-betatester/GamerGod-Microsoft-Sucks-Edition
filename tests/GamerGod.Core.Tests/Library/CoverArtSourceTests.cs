@@ -76,6 +76,85 @@ public sealed class CoverArtSourceTests
             "a cropped landscape header must only ever be a fallback, never a first choice");
     }
 
+    // ---- the store lookup ----------------------------------------------
+
+    /// <summary>
+    /// Built by concatenation rather than an interpolated raw string: the JSON ends in three
+    /// consecutive closing braces, which no number of '$' sigils lets the parser read as
+    /// content rather than as the end of a hole.
+    /// </summary>
+    private static string Details(string appId, string headerUrl) =>
+        "{\"" + appId + "\":{\"success\":true,\"data\":{\"name\":\"A Game\",\"header_image\":\""
+        + headerUrl + "\"}}}";
+
+    [Fact]
+    public void The_current_header_address_is_read_from_the_store_response()
+    {
+        // Why this exists at all: the unhashed addresses in CandidateUrls are the old layout,
+        // and Steam never retired them. A title whose art moved to a content-hashed directory
+        // still answers 200 there — with a stale generic placeholder. Only the store knows the
+        // current address.
+        var json = Details(
+            "2807960",
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2807960/c12d12ce/header.jpg?t=1784839791");
+
+        Assert.Equal(
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2807960/c12d12ce/header.jpg",
+            CoverArtSource.ExtractHeaderImageUrl(json, "2807960"));
+    }
+
+    [Fact]
+    public void A_title_the_store_has_no_data_for_yields_nothing()
+    {
+        // Delisted apps and redistributables answer with success:false and no data at all.
+        Assert.Null(CoverArtSource.ExtractHeaderImageUrl("""{"228980":{"success":false}}""", "228980"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("<html><body>Rate limited</body></html>")]
+    [InlineData("{ not json")]
+    [InlineData("""{"2807960":{"success":true,"data":{}}}""")]
+    [InlineData("""{"999":{"success":true,"data":{"header_image":"https://x.steamstatic.com/a.jpg"}}}""")]
+    public void A_response_that_cannot_be_used_yields_nothing_rather_than_throwing(string json) =>
+        Assert.Null(CoverArtSource.ExtractHeaderImageUrl(json, "2807960"));
+
+    [Theory]
+    [InlineData("http://shared.akamai.steamstatic.com/a/header.jpg")]
+    [InlineData("https://evil.example.com/header.jpg")]
+    [InlineData("https://steamstatic.com.evil.example.com/header.jpg")]
+    [InlineData("file:///C:/Windows/System32/config/SAM")]
+    [InlineData("javascript:alert(1)")]
+    public void An_address_the_store_returns_is_still_not_trusted(string url)
+    {
+        // This URL arrives from a remote server and becomes the target of a request. A
+        // compromised or spoofed response must not be able to point the download anywhere it
+        // likes, so the host and scheme are pinned regardless of what came back.
+        Assert.False(CoverArtSource.IsPermittedAssetUrl(url));
+        Assert.Null(CoverArtSource.ExtractHeaderImageUrl(Details("1", url), "1"));
+    }
+
+    [Fact]
+    public void Valves_own_asset_hosts_are_permitted()
+    {
+        Assert.True(CoverArtSource.IsPermittedAssetUrl("https://shared.akamai.steamstatic.com/a.jpg"));
+        Assert.True(CoverArtSource.IsPermittedAssetUrl("https://cdn.cloudflare.steamstatic.com/a.jpg"));
+    }
+
+    [Fact]
+    public void The_store_lookup_sends_nothing_but_the_app_id()
+    {
+        var uri = new Uri(CoverArtSource.StoreDetailsUrl("1517290")!);
+
+        Assert.Equal("https", uri.Scheme);
+        Assert.EndsWith(".steampowered.com", uri.Host, StringComparison.Ordinal);
+        Assert.Equal("?appids=1517290", uri.Query);
+    }
+
+    [Fact]
+    public void A_refused_id_never_produces_a_store_lookup() =>
+        Assert.Null(CoverArtSource.StoreDetailsUrl("../../etc/passwd"));
+
     // ---- what it believes ----------------------------------------------
 
     private static byte[] Jpeg(int size)

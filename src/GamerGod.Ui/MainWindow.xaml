@@ -38,12 +38,26 @@
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="16,0,0,0"
                             VerticalAlignment="Center">
-                    <Border Width="22" Height="22" CornerRadius="3"
+                    <!--
+                        The stacked GG, matching the application icon: a hollow G behind and
+                        above, a solid one in front and below. Clipped to the enclosure for the
+                        same reason the icon is — a mark that leaks out of its own frame reads
+                        as a mistake.
+                    -->
+                    <Border Width="28" Height="28" CornerRadius="4"
                             BorderBrush="{StaticResource Signal}" BorderThickness="1"
-                            Background="{StaticResource SignalGlow}">
-                        <TextBlock Text="G" FontFamily="{StaticResource Display}" FontSize="12"
-                                   FontWeight="Bold" Foreground="{StaticResource Signal}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            Background="{StaticResource SignalGlow}"
+                            ClipToBounds="True">
+                        <Grid>
+                            <TextBlock Text="G" FontFamily="{StaticResource Display}" FontSize="13"
+                                       FontWeight="Bold" Foreground="{StaticResource SignalDim}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Margin="0,0,7,7" />
+                            <TextBlock Text="G" FontFamily="{StaticResource Display}" FontSize="13"
+                                       FontWeight="Bold" Foreground="{StaticResource Signal}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Margin="7,7,0,0" />
+                        </Grid>
                     </Border>
                     <TextBlock Text="GamerGod" FontFamily="{StaticResource Display}" FontSize="13"
                                FontWeight="SemiBold" Foreground="{StaticResource Ink}"

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 
 namespace GamerGod.Core.Library;
 
@@ -101,6 +102,95 @@ public static class CoverArtSource
             $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/header.jpg",
         ];
     }
+
+    /// <summary>
+    /// Where to ask Steam what a title's art actually is.
+    ///
+    /// <para>
+    /// Needed because the addresses in <see cref="CandidateUrls"/> are the *old* unhashed
+    /// layout, and Steam has since moved published art to content-hashed directories. The old
+    /// addresses were never retired — they still answer 200 — so a title whose art moved
+    /// serves a stale generic placeholder from them rather than a 404. That is the trap
+    /// Battlefield 6 fell into: a valid grey JPEG at exactly the address you would expect the
+    /// cover to be.
+    /// </para>
+    ///
+    /// <para>
+    /// This endpoint is the authority on the current address. It takes no key and no account;
+    /// the app id has to travel in the query string because that is the only parameter it
+    /// accepts, and nothing else is sent.
+    /// </para>
+    /// </summary>
+    public static string? StoreDetailsUrl(string appId) =>
+        IsUsableAppId(appId)
+            ? $"https://store.steampowered.com/api/appdetails?appids={appId}"
+            : null;
+
+    /// <summary>
+    /// Pulls the current header address out of a store details response, with the cache-busting
+    /// timestamp stripped.
+    ///
+    /// <para>
+    /// Landscape, so it is the wrong shape for a 2:3 tile and the interface has to present it
+    /// as a banner rather than crop it to death. It is fetched only when a title has no
+    /// portrait cover at all — which is the common case for publishers who never uploaded one,
+    /// Battlefield 6 among them. Real key art in the wrong aspect beats a letter on a gradient.
+    /// </para>
+    ///
+    /// <para>
+    /// Returns null for the several ordinary ways this comes back empty: a delisted app, a
+    /// redirect to a login page, a rate-limit body, or a region the title is not sold in.
+    /// </para>
+    /// </summary>
+    public static string? ExtractHeaderImageUrl(string json, string appId)
+    {
+        if (string.IsNullOrWhiteSpace(json) || !IsUsableAppId(appId))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+
+            if (!document.RootElement.TryGetProperty(appId, out var entry)
+                || !entry.TryGetProperty("success", out var success)
+                || success.ValueKind != JsonValueKind.True
+                || !entry.TryGetProperty("data", out var data)
+                || !data.TryGetProperty("header_image", out var header)
+                || header.GetString() is not { } url)
+            {
+                return null;
+            }
+
+            // The ?t= suffix is a cache-buster, and the asset resolves without it. Dropping it
+            // keeps the request identical to any other anonymous image fetch.
+            var clean = url.Split('?')[0];
+
+            return IsPermittedAssetUrl(clean) ? clean : null;
+        }
+        catch (JsonException)
+        {
+            // Steam answers rate limits and outages with HTML. Not an error worth surfacing.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether an address handed back by the store is one this application is willing to
+    /// fetch.
+    ///
+    /// <para>
+    /// The URL in that response is data from a remote server, and it becomes the target of a
+    /// request. Pinning it to HTTPS on Valve's own asset hosts means a compromised or spoofed
+    /// response cannot redirect the download somewhere else.
+    /// </para>
+    /// </summary>
+    public static bool IsPermittedAssetUrl(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+        && (uri.Host.EndsWith(".steamstatic.com", StringComparison.OrdinalIgnoreCase)
+            || uri.Host.EndsWith(".steampowered.com", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Whether a downloaded body is a real cover worth showing.

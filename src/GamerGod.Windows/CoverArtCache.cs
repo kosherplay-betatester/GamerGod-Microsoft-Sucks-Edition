@@ -77,7 +77,56 @@ public static class CoverArtCache
             }
         }
 
-        return null;
+        // No portrait cover exists for this title. Ask the store where its header art lives
+        // and take that instead — landscape, so the tile presents it as a banner rather than
+        // cropping it, but real key art all the same.
+        return await TryFetchHeaderAsync(appId, token).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The fallback for titles whose publisher never uploaded a portrait capsule.
+    ///
+    /// <para>
+    /// Two requests rather than one, and only for titles that already failed the cheap path.
+    /// The store endpoint is rate-limited, so a large library will eventually start being
+    /// refused — which costs nothing, because a refusal is indistinguishable from "no art" and
+    /// pressing the button again picks up where it left off.
+    /// </para>
+    /// </summary>
+    private static async Task<string?> TryFetchHeaderAsync(string appId, CancellationToken token)
+    {
+        if (CoverArtSource.StoreDetailsUrl(appId) is not { } detailsUrl)
+        {
+            return null;
+        }
+
+        string json;
+        try
+        {
+            using var response = await Http.GetAsync(detailsUrl, token).ConfigureAwait(false);
+
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                return null;
+            }
+
+            json = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        // Validated against an allow-list before it is fetched: this address arrived from a
+        // remote server and is about to become the target of a request.
+        if (CoverArtSource.ExtractHeaderImageUrl(json, appId) is not { } headerUrl)
+        {
+            return null;
+        }
+
+        var bytes = await TryDownloadAsync(headerUrl, token).ConfigureAwait(false);
+
+        return bytes is null ? null : Persist(appId, bytes);
     }
 
     private static async Task<byte[]?> TryDownloadAsync(string url, CancellationToken token)
