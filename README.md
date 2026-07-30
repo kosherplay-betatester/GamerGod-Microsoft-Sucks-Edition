@@ -134,16 +134,15 @@ precisely to tell those two cases apart.
 ## What the app is made of
 
 ```
-GamerGod.Core          pure domain — mutations, ledger, policy, search.  NO OS calls.
-GamerGod.Abstractions  the interfaces the engine talks to
-GamerGod.Windows       the ONLY project allowed to P/Invoke
-GamerGod.Engine        enter/exit orchestration
-GamerGod.Ui            the desktop app
-GamerGod.Cli           gamergod.exe — and the privileged broker
-GamerGod.Bench         PresentMon interop + A/B statistics
+GamerGod.Core          pure domain - mutations, ledger, policy, catalogue, search,
+                       measurement. NO OS calls. Contains the Engine/ and Measurement/
+                       namespaces; they are folders here, not separate projects.
+GamerGod.Windows       the ONLY project that P/Invokes. NativeMethods.txt is the audit surface.
+GamerGod.Ui            the WPF desktop app
+GamerGod.Cli           gamergod.exe - and the privileged broker the app calls for elevation
 ```
 
-`Core` and `Engine` **cannot** reference `GamerGod.Windows` — an architecture test fails the
+`Core` **cannot** reference `GamerGod.Windows` — an architecture test fails the
 build if they do. That constraint is what makes the chaos tests possible: the entire ledger runs
 against a fake operating system, with no admin rights and no real machine state, so a power cut
 can be simulated 500 times in a second.

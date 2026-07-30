@@ -39,17 +39,21 @@ benefit with real frametime data, and restores the machine exactly on exit or cr
 ## Architecture
 
 ```
-GamerGod.Core          pure domain — mutations, ledger, policy, domains. NO OS calls.
-GamerGod.Abstractions  interfaces the engine talks to (IServiceControl, ITopologyProvider…)
+GamerGod.Core          pure domain — mutations, ledger, policy, catalogue, search,
+                       measurement. NO OS calls. Engine/ and Measurement/ are namespaces
+                       inside this project, not separate projects.
 GamerGod.Windows       the ONLY project that P/Invokes. NativeMethods.txt is the audit surface.
-GamerGod.Engine        enter/exit orchestration state machine
-GamerGod.Service       Windows Service (LocalSystem): privileged broker + watchdog + boot recovery
-GamerGod.Sentinel      per-session agent: hotkeys, shell, frontend
-GamerGod.Cli           gamergod.exe
-GamerGod.Bench         PresentMon interop + A/B statistics
+GamerGod.Ui            the WPF desktop app
+GamerGod.Cli           gamergod.exe — and the privileged broker the app shells out to
 ```
 
-**`Core` and `Engine` must not reference `GamerGod.Windows`.** An architecture test enforces
+**Not built, and this list must not imply otherwise:** `GamerGod.Service` (LocalSystem broker,
+watchdog, boot recovery) and `GamerGod.Sentinel` (per-session agent: hotkeys, overlay). The
+elevation broker today is the CLI, invoked with `runas`. An earlier version of this section
+listed both as though they existed, and that error was copied into the README before anyone
+checked the solution file.
+
+**`Core` must not reference `GamerGod.Windows`.** An architecture test enforces
 this. It is what makes the chaos tests possible — they run the whole ledger against a
 `FakeOs` with no admin rights and no real machine state.
 
