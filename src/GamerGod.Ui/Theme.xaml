@@ -382,9 +382,21 @@
                                        VerticalAlignment="Center" Margin="10,0,8,0" />
 
                             <Grid Grid.Column="1">
+                                <!--
+                                    Hidden by default and revealed by the empty-text trigger
+                                    below - not the other way round.
+
+                                    It shipped defaulting to Visible with a trigger that also
+                                    set it Visible, so it never hid: the placeholder sat in the
+                                    same cell as whatever you typed and the two rendered on top
+                                    of each other. A WPF trigger reverts its setter when the
+                                    condition stops holding, so the resting state has to be the
+                                    hidden one.
+                                -->
                                 <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}"
                                            Foreground="{StaticResource InkFaint}"
                                            FontSize="12.5" VerticalAlignment="Center"
+                                           Visibility="Collapsed"
                                            IsHitTestVisible="False" />
                                 <ScrollViewer x:Name="PART_ContentHost"
                                               VerticalAlignment="Center"
@@ -392,7 +404,9 @@
                                               VerticalScrollBarVisibility="Hidden" />
                             </Grid>
 
-                            <TextBlock Grid.Column="2" Text="ESC"
+                            <!-- Only once there is something to clear. An ESC hint on an empty
+                                 box is an instruction to undo nothing. -->
+                            <TextBlock x:Name="ClearHint" Grid.Column="2" Text="ESC"
                                        FontFamily="{StaticResource Data}" FontSize="9"
                                        Foreground="{StaticResource InkFaint}"
                                        VerticalAlignment="Center" Margin="0,0,10,0"
@@ -403,6 +417,7 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="Text" Value="">
                             <Setter TargetName="Hint" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="ClearHint" Property="Visibility" Value="Collapsed" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Chrome" Property="BorderBrush"
@@ -416,11 +431,6 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
-        <Style.Triggers>
-            <Trigger Property="Text" Value="">
-                <Setter Property="Foreground" Value="{StaticResource Ink}" />
-            </Trigger>
-        </Style.Triggers>
     </Style>
 
     <!--

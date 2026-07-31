@@ -181,17 +181,18 @@ public sealed class SessionWatchdogTests
 
         var journal = new InMemoryJournal();
         var gate = new TaskCompletionSource();
-        var resolver = new GatedResolver(machine, gate.Task);
 
-        var mutation = new FakeMutation(machine, "service:WSearch", MutationTier.Service, "Stopped");
-        var ledger = new MutationLedger(journal, resolver);
+        // The session's own object, not a rebuild: this is the process that applied, so this
+        // is the object the ledger reverts through.
+        var mutation = new GatedMutation(machine, "service:WSearch", "Stopped", gate.Task);
+        var ledger = new MutationLedger(journal, new FakeResolver(machine));
         await ledger.ApplyAsync("live", [mutation], Permit());
 
         using var stop = new CancellationTokenSource();
         var watching = new SessionWatchdog(ledger, new ScriptedLiveness((ProcessIdentity?)null), Immediately)
             .WatchAsync(Owner, stop.Token);
 
-        await WaitUntilAsync(() => resolver.RevertStarted, "the watchdog never started reverting");
+        await WaitUntilAsync(() => mutation.RevertStarted, "the watchdog never started reverting");
 
         await stop.CancelAsync();
         gate.SetResult();
@@ -316,17 +317,9 @@ public sealed class SessionWatchdogTests
         }
     }
 
-    /// <summary>Rebuilds a mutation whose revert blocks until a gate opens.</summary>
-    private sealed class GatedResolver(FakeMachine machine, Task gate) : IMutationResolver
-    {
-        public bool RevertStarted { get; private set; }
-
-        public IMutation? Resolve(string mutationType, string key) =>
-            new GatedMutation(machine, key, gate, () => RevertStarted = true);
-    }
-
+    /// <summary>A mutation whose revert parks until a gate opens.</summary>
     private sealed class GatedMutation(
-        FakeMachine machine, string key, Task gate, Action onRevertStarted) : IMutation
+        FakeMachine machine, string key, string newValue, Task gate) : IMutation
     {
         public string Key => key;
 
@@ -336,16 +329,22 @@ public sealed class SessionWatchdogTests
 
         public bool IsBootPersistent => false;
 
+        public bool RevertStarted { get; private set; }
+
         public string Describe() => $"gated {key}";
 
         public ValueTask<JsonElement> CaptureAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult(JsonSerializer.SerializeToElement(new Capture(machine[key])));
 
-        public ValueTask ApplyAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+        public ValueTask ApplyAsync(CancellationToken cancellationToken)
+        {
+            machine[key] = newValue;
+            return ValueTask.CompletedTask;
+        }
 
         public async ValueTask RevertAsync(JsonElement capture, CancellationToken cancellationToken)
         {
-            onRevertStarted();
+            RevertStarted = true;
             await gate;
             machine[key] = capture.Deserialize<Capture>()!.Previous;
         }

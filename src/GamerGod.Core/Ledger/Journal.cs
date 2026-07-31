@@ -75,6 +75,40 @@ public sealed record JournalEntry
     /// </para>
     /// </summary>
     public long MachineBootedAtUtcTicks { get; init; }
+
+    /// <summary>
+    /// The process that armed this session. Recorded on <see cref="JournalOp.SessionBegin"/>
+    /// and zero elsewhere — an owner belongs to a session, not to an individual change.
+    ///
+    /// <para>
+    /// Boot recovery reverts anything the journal still shows as applied, which is right for a
+    /// session whose program died and wrong for one that is still running. Without this, a
+    /// service restart — an upgrade, a manual restart, a failed start followed by a retry —
+    /// turned Game Mode off underneath somebody mid-match, and the service had no way to tell
+    /// that apart from cleaning up after a bugcheck.
+    /// </para>
+    ///
+    /// <para>
+    /// Zero means no owner: an older journal, or a caller that applies and exits and therefore
+    /// has nobody left to keep the session alive. Such a session is recovered, because an
+    /// unclaimed session is one nobody can end and leaving it would strand the machine.
+    /// </para>
+    /// </summary>
+    public int OwnerProcessId { get; init; }
+
+    /// <summary>
+    /// When the arming process started, in UTC ticks.
+    ///
+    /// <para>
+    /// Windows reuses process ids aggressively, so the number alone is not an identity. An
+    /// unrelated program that inherited the id would keep a stranded session looking alive at
+    /// every boot from then on, which turns "leave live sessions alone" into "never recover
+    /// anything". Together with <see cref="OwnerProcessId"/> this is a
+    /// <see cref="Recovery.ProcessIdentity"/> — the same identity the watchdog matches on, for
+    /// the same reason. Both halves or neither: a bare id is not trusted.
+    /// </para>
+    /// </summary>
+    public long OwnerStartedAtUtcTicks { get; init; }
 }
 
 /// <summary>

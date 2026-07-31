@@ -106,7 +106,8 @@ public sealed class GroupAffinityTests
             var pass = new LedgerRecoveryPass(
                 [path],
                 new WindowsAmbientOperations(),
-                new WindowsTopologyProvider().Classify());
+                new WindowsTopologyProvider().Classify(),
+                new WindowsProcessLiveness());
 
             var outcome = await pass.RunAsync(default);
 
@@ -131,7 +132,8 @@ public sealed class GroupAffinityTests
         var pass = new LedgerRecoveryPass(
             [Path.Combine(Path.GetTempPath(), "GamerGod.Tests", Guid.NewGuid().ToString("N"), "none.journal")],
             new WindowsAmbientOperations(),
-            new WindowsTopologyProvider().Classify());
+            new WindowsTopologyProvider().Classify(),
+            new WindowsProcessLiveness());
 
         var outcome = await pass.RunAsync(default);
 

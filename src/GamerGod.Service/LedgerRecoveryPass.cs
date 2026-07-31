@@ -23,13 +23,18 @@ public sealed class LedgerRecoveryPass : IBootRecoveryPass
     private readonly ImmutableArray<string> _journalPaths;
     private readonly IAmbientOperations _operations;
     private readonly CpuTopology _topology;
+    private readonly IProcessLiveness _liveness;
 
     public LedgerRecoveryPass(
-        ImmutableArray<string> journalPaths, IAmbientOperations operations, CpuTopology topology)
+        ImmutableArray<string> journalPaths,
+        IAmbientOperations operations,
+        CpuTopology topology,
+        IProcessLiveness liveness)
     {
         _journalPaths = journalPaths.IsDefault ? [] : journalPaths;
         _operations = operations ?? throw new ArgumentNullException(nameof(operations));
         _topology = topology ?? throw new ArgumentNullException(nameof(topology));
+        _liveness = liveness ?? throw new ArgumentNullException(nameof(liveness));
     }
 
     /// <summary>
@@ -47,7 +52,8 @@ public sealed class LedgerRecoveryPass : IBootRecoveryPass
             return new LedgerRecoveryPass(
                 StateLayout.Journals(),
                 new WindowsAmbientOperations(),
-                new WindowsTopologyProvider().Classify());
+                new WindowsTopologyProvider().Classify(),
+                new WindowsProcessLiveness());
         }
         catch (Exception ex)
         {
@@ -64,7 +70,9 @@ public sealed class LedgerRecoveryPass : IBootRecoveryPass
             var ledger = new MutationLedger(
                 new FileJournal(path), new AmbientMutationResolver(_operations, _topology));
 
-            outcomes.Add(await BootRecovery.RunAsync(ledger, cancellationToken).ConfigureAwait(false));
+            outcomes.Add(await BootRecovery
+                .RunAsync(ledger, _liveness, cancellationToken)
+                .ConfigureAwait(false));
         }
 
         return Combine(outcomes);

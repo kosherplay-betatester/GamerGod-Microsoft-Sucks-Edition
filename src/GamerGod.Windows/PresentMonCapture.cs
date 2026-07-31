@@ -43,14 +43,14 @@ public sealed class PresentMonCapture : IFrameCapture
 
     public CaptureSource Source { get; }
 
-    public async ValueTask<FrameSeries> CaptureAsync(
+    public async ValueTask<CapturedFrames> CaptureAsync(
         int? processId, TimeSpan duration, CancellationToken cancellationToken)
     {
         if (_executable is null)
         {
             // Empty, never invented. A plausible-looking series would be indistinguishable
             // from a real measurement to everything downstream.
-            return FrameSeries.FromFrameTimes([]);
+            return CapturedFrames.Empty;
         }
 
         var seconds = Math.Max(1, (int)Math.Ceiling(duration.TotalSeconds));
@@ -97,7 +97,7 @@ public sealed class PresentMonCapture : IFrameCapture
             using var process = Process.Start(startInfo);
             if (process is null)
             {
-                return FrameSeries.FromFrameTimes([]);
+                return CapturedFrames.Empty;
             }
 
             var output = await process.StandardOutput.ReadToEndAsync(cancellationToken)
@@ -105,9 +105,15 @@ public sealed class PresentMonCapture : IFrameCapture
 
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
-            // Discard the first two seconds: shader compilation, first-time file reads and
-            // clock ramp make the opening of any capture unrepresentative.
-            return FrameSeries.FromFrameTimes(PresentMonCsv.ParseFrameTimes(output), discardFirstSeconds: 2.0);
+            // The whole CSV, parsed once, keeping the per-frame rows as well as the frame times.
+            // The rows are what stutter attribution reads, and an earlier version discarded them
+            // — which left attribution with no way to run on a capture a user actually took.
+            //
+            // The first two seconds go, from the rows and the statistics alike: shader
+            // compilation, first-time file reads and clock ramp make the opening of any capture
+            // unrepresentative, and a cause named for a frame the verdict beside it excluded
+            // would be a report about data nobody was shown.
+            return CapturedFrames.FromCsv(output, discardFirstSeconds: 2.0);
         }
         catch (OperationCanceledException)
         {
@@ -116,7 +122,7 @@ public sealed class PresentMonCapture : IFrameCapture
         catch (Exception)
         {
             // A capture that failed produced no data. Saying so is correct; guessing is not.
-            return FrameSeries.FromFrameTimes([]);
+            return CapturedFrames.Empty;
         }
     }
 

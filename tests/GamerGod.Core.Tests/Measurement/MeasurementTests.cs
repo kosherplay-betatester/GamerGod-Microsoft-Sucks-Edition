@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using GamerGod.Core.Forensics;
 using GamerGod.Core.Measurement;
 using Xunit;
 
@@ -329,11 +330,11 @@ public sealed class FrameCaptureTests
 
         Assert.False(capture.Source.IsAvailable);
 
-        var series = await capture.CaptureAsync(null, TimeSpan.FromSeconds(1), default);
+        var result = await capture.CaptureAsync(null, TimeSpan.FromSeconds(1), default);
 
         // Empty, never fabricated. A plausible-looking invented series would be
         // indistinguishable from a measurement to everything downstream.
-        Assert.True(series.IsEmpty);
+        Assert.True(result.Series.IsEmpty);
     }
 
     [Fact]
@@ -418,14 +419,17 @@ public sealed class FrameCaptureTests
 
         public CaptureSource Source { get; } = new() { Name = "stub", IsAvailable = true };
 
-        public ValueTask<FrameSeries> CaptureAsync(
+        public ValueTask<CapturedFrames> CaptureAsync(
             int? processId, TimeSpan duration, CancellationToken cancellationToken)
         {
             // A touch of variation per call so the bootstrap has something to work with.
             var random = new Random(_call++);
-            return ValueTask.FromResult(FrameSeries.FromFrameTimes(
-                Enumerable.Range(0, 300)
-                    .Select(_ => frameTimeMs + ((random.NextDouble() - 0.5) * 0.4))));
+            return ValueTask.FromResult(CapturedFrames.FromFrames(
+                Enumerable.Range(0, 300).Select(i => new FrameRecord
+                {
+                    Index = i,
+                    MsBetweenPresents = frameTimeMs + ((random.NextDouble() - 0.5) * 0.4),
+                })));
         }
     }
 }

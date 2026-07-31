@@ -149,6 +149,42 @@ build if they do. That constraint is what makes the chaos tests possible: the en
 against a fake operating system, with no admin rights and no real machine state, so a power cut
 can be simulated 500 times in a second.
 
+## Why a hitch happened, without touching the game
+
+PresentMon already reports how long the CPU was busy, how long it waited, how long the GPU was
+executing, and which presentation path the frame took. That is enough to attribute a hitch to a
+**stage of the pipeline** — no ETW, no admin, no kernel anything.
+
+| What the data showed | What it means |
+|---|---|
+| GPU busy for most of the frame | the GPU was the thing occupying it |
+| The game's own CPU work filled the frame | the game was thinking |
+| The CPU waited while the GPU was idle | it was blocked on something that was not the GPU |
+| The frame went through the desktop compositor | it did not go straight to the display |
+| Presentation left independent flip | the fast path was lost on this frame |
+| **Not attributable** | **the capture does not contain an answer — and it says so** |
+
+That last row is the one that matters. Columns are sometimes unavailable, and a report that
+quietly dropped the frames it could not explain would be completely confident about whatever
+fraction it happened to understand. Unattributable frames are counted, and they can rank first.
+
+It names a stage, never a process. "The GPU was busy for 31 ms while the CPU waited" is a fact
+about a capture. "It was Windows Search" is a claim that needs machinery GamerGod does not have,
+and it will not be printed until it does.
+
+## Streaming
+
+GamerGod never touches a live encoder. **OBS, Streamlabs, XSplit, Twitch Studio, vMix, Wirecast,
+ShadowPlay, ReLive and Elgato's capture software are all protected** — not merely from being
+suspended, but from being demoted or moved off the game's cores at all.
+
+That is its own category in the safety policy, because the consequence is genuinely different.
+For everything else on the list, demotion is the gentler alternative when suspension is refused.
+For a live encoder it is not: missing a 60 Hz deadline is the same failure arrived at more
+politely, and a dropped frame is gone from the recording of a live event. OBS's muxer is listed
+separately from its encoder, because protecting the encoder while demoting the process that
+writes its output produces a corrupted recording from a session that looked fine throughout.
+
 ## Why it asks for permission
 
 The revert journal lives in `C:\ProgramData\GamerGod\state`, where ordinary users have
@@ -343,11 +379,27 @@ runs, which read as protection and provided none.
 # Status
 
 **Shipping** — domain partitioning · efficiency-mode demotion · service suspension · power-scheme
-management · the full ledger and journal · crash recovery · the desktop app · game library ·
-software catalogue · free-games browser · typo-tolerant search · opt-in release check.
+management · the full ledger and journal · crash recovery · **a background service that restores
+the machine at boot** · **a crash watchdog** · **stutter attribution** · the desktop app · game
+library · software catalogue · free-games browser · typo-tolerant search · opt-in release check.
 
-**Designed, not yet built** — the background service and crash watchdog · stutter forensics · the
-in-app performance overlay · autotune.
+**Not built** — autotune. And the readout is deliberately minimal; see below.
+
+### The readout, and why RivaTuner is the better answer
+
+GamerGod draws a small readout — armed state, frames per second, 1% low, hitch count — in a
+window of its own. It works in Borderless and Windowed games and **not in Fullscreen ones**,
+because Windows will not put any window above a Fullscreen game and GamerGod will not do what
+every other overlay does to get around that.
+
+**If you want GPU and CPU temperatures, clocks, voltages, or an overlay that survives Fullscreen,
+install RivaTuner and MSI Afterburner.** They are one click away in Get more, they are on
+GamerGod's protected list so it will never move or demote them, and running them alongside
+GamerGod is the intended arrangement rather than a workaround. They can do what they do because
+they run their own code inside the game. That is the line GamerGod does not cross, and this is
+what the line costs.
+
+Article IX: build the conductor, not every instrument.
 
 **Deliberately absent — a frame-rate number.** GamerGod will not tell you how many frames it
 gained, because it has not measured *yours*. When the measurement harness lands you will get a

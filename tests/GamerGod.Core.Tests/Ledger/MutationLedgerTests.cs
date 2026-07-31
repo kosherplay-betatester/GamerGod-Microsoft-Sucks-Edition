@@ -256,12 +256,15 @@ public sealed class MutationLedgerTests
         var mutation = new FakeMutation(machine, "mystery", MutationTier.Registry, "changed");
         resolver.Remember(mutation);
 
-        var ledger = new MutationLedger(journal, resolver);
-        await ledger.ApplyAsync("s1", [mutation], AmbientOnly());
+        await new MutationLedger(journal, resolver).ApplyAsync("s1", [mutation], AmbientOnly());
 
-        // Model a downgrade: the implementation that made the change no longer exists.
+        // Model a downgrade: a later process reads the journal and the implementation that
+        // made the change no longer exists. It has to be a different ledger, because the one
+        // that applied still holds the object and would quite correctly use it — the
+        // unresolvable case only arises for a process that never applied anything.
         resolver.Unresolvable.Add("mystery");
 
+        var ledger = new MutationLedger(journal.ReopenCold(), resolver);
         var report = await ledger.RevertAsync();
 
         Assert.False(report.IsClean);

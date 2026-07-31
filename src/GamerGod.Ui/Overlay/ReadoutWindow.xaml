@@ -1,0 +1,93 @@
+<Window x:Class="GamerGod.Ui.Overlay.ReadoutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GamerGod readout"
+        SizeToContent="WidthAndHeight"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        Focusable="False"
+        IsHitTestVisible="False"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <!--
+        The readout carries only what changes.
+
+        Everything constant for a session - the anti-cheat tier, the active profile, which
+        cores the game got - belongs to the receipt, not to a line somebody is trying to read
+        while being shot at. That rule removed about two thirds of what an earlier draft put
+        here, and it removed it for a reason that will still hold in a year.
+
+        No drop shadow: over arbitrary game art a shadow reads as a smudge, and it is more for
+        the compositor to carry - which is the exact cost this feature has to justify.
+    -->
+    <Border Background="#990D1017"
+            BorderBrush="#262D3B"
+            BorderThickness="1"
+            CornerRadius="3"
+            Padding="9,5">
+
+        <StackPanel Orientation="Horizontal">
+
+            <!-- Armed or not. One bit, and the only one a player cannot learn without
+                 leaving the game. Amber when armed, grey when not. -->
+            <TextBlock x:Name="ArmedMark"
+                       Text="GG"
+                       FontFamily="Bahnschrift, Segoe UI, sans-serif"
+                       FontSize="12"
+                       FontWeight="Bold"
+                       Foreground="#5A6377"
+                       VerticalAlignment="Center" />
+
+            <TextBlock x:Name="Fps"
+                       FontFamily="Cascadia Mono, Consolas, monospace"
+                       FontSize="12.5"
+                       Foreground="#E8EBF2"
+                       VerticalAlignment="Center"
+                       Margin="14,0,0,0" />
+
+            <TextBlock Text="1%"
+                       FontFamily="Bahnschrift, Segoe UI, sans-serif"
+                       FontSize="9"
+                       Foreground="#5A6377"
+                       VerticalAlignment="Center"
+                       Margin="14,1,0,0" />
+
+            <TextBlock x:Name="OnePercentLow"
+                       FontFamily="Cascadia Mono, Consolas, monospace"
+                       FontSize="12.5"
+                       Foreground="#E8EBF2"
+                       VerticalAlignment="Center"
+                       Margin="5,0,0,0" />
+
+            <TextBlock Text="HITCH"
+                       FontFamily="Bahnschrift, Segoe UI, sans-serif"
+                       FontSize="9"
+                       Foreground="#5A6377"
+                       VerticalAlignment="Center"
+                       Margin="14,1,0,0" />
+
+            <TextBlock x:Name="Hitches"
+                       FontFamily="Cascadia Mono, Consolas, monospace"
+                       FontSize="12.5"
+                       Foreground="#E8EBF2"
+                       VerticalAlignment="Center"
+                       Margin="5,0,0,0" />
+
+            <!-- The escape, always visible for the first six seconds and after any change of
+                 detail level. A click-through window cannot offer a button, so the way out has
+                 to be a keypress and the keypress has to be on screen. -->
+            <TextBlock x:Name="Escape"
+                       Text="Ctrl+Shift+O hides this"
+                       FontFamily="Cascadia Mono, Consolas, monospace"
+                       FontSize="10"
+                       Foreground="#5A6377"
+                       VerticalAlignment="Center"
+                       Margin="16,1,0,0" />
+        </StackPanel>
+    </Border>
+</Window>

@@ -24,6 +24,7 @@ using GamerGod.Core.Search;
 using GamerGod.Core.Updates;
 using GamerGod.Ui.Audio;
 using GamerGod.Ui.Library;
+using GamerGod.Ui.Overlay;
 using GamerGod.Ui.Settings;
 using GamerGod.Windows;
 
@@ -40,6 +41,7 @@ public partial class MainWindow : Window
     private bool _catalogueLoaded;
     private GameTile? _selected;
     private AvailableRelease? _update;
+    private ReadoutController? _readout;
     private ImmutableArray<FreeGame> _freeGames = [];
     private FreeGameSort _freeSort = FreeGameSort.Popularity;
     private bool _freeLoaded;
@@ -104,6 +106,22 @@ public partial class MainWindow : Window
         UpdateMaximiseGlyph();
         StateChanged += (_, _) => UpdateMaximiseGlyph();
         DescribeRights();
+
+        // The readout reports GamerGod's own state and, once a capture is running, its frames.
+        // Nothing here inspects a game.
+        _readout = new ReadoutController(this, () => new ReadoutSnapshot(
+            Armed: MasterSwitch.IsChecked == true,
+            Fps: null,
+            OnePercentLowFps: null,
+            Hitches: null));
+
+        _readout.RegisterHotKey();
+        Closed += (_, _) => _readout?.Dispose();
+
+        if (_readout.HotKeyProblem is { } problem)
+        {
+            OverlayMeasured.Text = $"The Ctrl+Shift+O key is unavailable: {problem}.";
+        }
 
         ApplySettingsToControls();
 
@@ -1344,6 +1362,27 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Sends the user to the catalogue with the tuning tools in view.
+    ///
+    /// <para>
+    /// The readout is deliberately the smallest useful thing: armed state, frame rate, 1% low,
+    /// hitch count. Anyone who wants sensors, or an overlay that survives Fullscreen, is better
+    /// served by RivaTuner — and saying so costs GamerGod a feature comparison it would lose
+    /// anyway, which is the cheapest kind of honesty available.
+    /// </para>
+    /// </summary>
+    private void Overlay_OpenCatalogue(object sender, RoutedEventArgs e)
+    {
+        Tick();
+        NavGetMore.IsChecked = true;
+
+        if (CatalogueSearch is not null)
+        {
+            CatalogueSearch.Text = "rivatuner";
+        }
+    }
+
     private void Update_Notes(object sender, RoutedEventArgs e)
     {
         if (_update is { } release)
@@ -2259,6 +2298,7 @@ public partial class MainWindow : Window
         OptConfirm.IsChecked = _settings.ConfirmBeforeApplying;
         OptArmOnLaunch.IsChecked = _settings.ArmOnLaunch;
         OptCoverArt.IsChecked = _settings.FetchCoverArt;
+        OptOverlay.IsChecked = _settings.OverlayEnabled;
         OptUpdates.IsChecked = _settings.CheckForUpdates;
 
         UpdateLibraryBlurb();
@@ -2281,11 +2321,24 @@ public partial class MainWindow : Window
             ConfirmBeforeApplying = OptConfirm.IsChecked == true,
             ArmOnLaunch = OptArmOnLaunch.IsChecked == true,
             FetchCoverArt = OptCoverArt.IsChecked == true,
+            OverlayEnabled = OptOverlay.IsChecked == true,
             CheckForUpdates = OptUpdates.IsChecked == true,
         };
 
         _settings.Save();
         UpdateLibraryBlurb();
+
+        // Applied immediately rather than at next launch: a switch that does nothing until you
+        // restart is a switch people conclude is broken.
+        if (_settings.OverlayEnabled)
+        {
+            _readout?.Show();
+        }
+        else
+        {
+            _readout?.Hide();
+        }
+
         _sounds.Play(UiSound.Confirm);
     }
 

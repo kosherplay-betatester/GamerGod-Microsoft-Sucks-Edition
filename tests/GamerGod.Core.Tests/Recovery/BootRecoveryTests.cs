@@ -27,6 +27,25 @@ namespace GamerGod.Core.Tests.Recovery;
 /// </summary>
 public sealed class BootRecoveryTests
 {
+    /// <summary>
+    /// The liveness answer for a journal that names no owner: nothing to ask about. Owner
+    /// identity is exercised in <see cref="SessionOwnershipTests"/>; these tests are about
+    /// what the pass does once it has decided a session is orphaned.
+    /// </summary>
+    private static readonly IProcessLiveness NobodyIsRunning = new NoProcessIsRunning();
+
+    /// <summary>
+    /// An owner that <see cref="NobodyIsRunning"/> reports as gone.
+    ///
+    /// <para>
+    /// Tests about cancellation, failure reporting and idempotence need a session boot recovery
+    /// will actually revert, and an ownerless session is no longer one: a tool that applies and
+    /// exits leaves no owner by design, so recovery leaves it alone. Recording a dead owner
+    /// makes these sessions genuinely orphaned, which is what they always meant to be.
+    /// </para>
+    /// </summary>
+    private static readonly ProcessIdentity DeadOwner = new(4812, StartedAtUtcTicks: 638_000_000_000_000_000L);
+
     private static MutationPermit Permit() =>
         GameIntegrityPolicy.Evaluate(
             "session",
@@ -69,7 +88,7 @@ public sealed class BootRecoveryTests
 
         // A cold process: new ledger, new resolver, and only the lines that reached the disk.
         var next = new MutationLedger(durable.ReopenCold(), new FakeResolver(machine));
-        var outcome = await BootRecovery.RunAsync(next, default);
+        var outcome = await BootRecovery.RunAsync(next, NobodyIsRunning, default);
 
         Assert.True(outcome.HadOutstandingChanges);
         Assert.True(outcome.IsClean, outcome.Explain());
@@ -83,7 +102,7 @@ public sealed class BootRecoveryTests
         var machine = new FakeMachine();
 
         var outcome = await BootRecovery.RunAsync(
-            new MutationLedger(journal, new FakeResolver(machine)), default);
+            new MutationLedger(journal, new FakeResolver(machine)), NobodyIsRunning, default);
 
         Assert.False(outcome.HadOutstandingChanges);
         Assert.True(outcome.IsClean);
@@ -106,12 +125,12 @@ public sealed class BootRecoveryTests
         var resolver = new FakeResolver(machine);
         var mutations = Session(machine, resolver);
 
-        await new MutationLedger(journal, resolver).ApplyAsync("s1", mutations, Permit());
+        await new MutationLedger(journal, resolver).ApplyAsync("s1", mutations, Permit(), DeadOwner);
 
         var ledger = new MutationLedger(journal, resolver);
 
-        var first = await BootRecovery.RunAsync(ledger, default);
-        var second = await BootRecovery.RunAsync(ledger, default);
+        var first = await BootRecovery.RunAsync(ledger, NobodyIsRunning, default);
+        var second = await BootRecovery.RunAsync(ledger, NobodyIsRunning, default);
 
         Assert.True(first.HadOutstandingChanges);
         Assert.False(second.HadOutstandingChanges);
@@ -150,7 +169,7 @@ public sealed class BootRecoveryTests
         machine["affinity:ambient-domain"] = "belongs to something else now";
 
         var outcome = await BootRecovery.RunAsync(
-            new MutationLedger(journal, new FakeResolver(machine)), default);
+            new MutationLedger(journal, new FakeResolver(machine)), NobodyIsRunning, default);
 
         Assert.False(outcome.HadOutstandingChanges);
         Assert.Equal("belongs to something else now", machine["affinity:ambient-domain"]);
@@ -189,7 +208,7 @@ public sealed class BootRecoveryTests
         machine["registry:irq-policy"] = "changed";
 
         var outcome = await BootRecovery.RunAsync(
-            new MutationLedger(journal, new FakeResolver(machine)), default);
+            new MutationLedger(journal, new FakeResolver(machine)), NobodyIsRunning, default);
 
         Assert.True(outcome.HadOutstandingChanges);
         Assert.True(outcome.IsClean, outcome.Explain());
@@ -210,9 +229,9 @@ public sealed class BootRecoveryTests
             new FakeMutation(machine, "service:WSearch", MutationTier.Service, "Stopped"),
             new FakeMutation(machine, "power:scheme", MutationTier.Power, "GamerGod"));
 
-        await new MutationLedger(journal, resolver).ApplyAsync("s1", mutations, Permit());
+        await new MutationLedger(journal, resolver).ApplyAsync("s1", mutations, Permit(), DeadOwner);
 
-        var outcome = await BootRecovery.RunAsync(new MutationLedger(journal, resolver), default);
+        var outcome = await BootRecovery.RunAsync(new MutationLedger(journal, resolver), NobodyIsRunning, default);
 
         Assert.True(outcome.HadOutstandingChanges);
         Assert.False(outcome.IsClean);
@@ -232,7 +251,7 @@ public sealed class BootRecoveryTests
         var machine = new FakeMachine();
 
         var outcome = await BootRecovery.RunAsync(
-            new MutationLedger(new UnreadableJournal(), new FakeResolver(machine)), default);
+            new MutationLedger(new UnreadableJournal(), new FakeResolver(machine)), NobodyIsRunning, default);
 
         Assert.False(outcome.IsClean);
         Assert.NotNull(outcome.Error);
@@ -248,13 +267,13 @@ public sealed class BootRecoveryTests
         var journal = new InMemoryJournal();
         var resolver = new FakeResolver(machine);
         await new MutationLedger(journal, resolver)
-            .ApplyAsync("s1", Session(machine, resolver), Permit());
+            .ApplyAsync("s1", Session(machine, resolver), Permit(), DeadOwner);
 
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
 
         var outcome = await BootRecovery.RunAsync(
-            new MutationLedger(journal, resolver), cancelled.Token);
+            new MutationLedger(journal, resolver), NobodyIsRunning, cancelled.Token);
 
         Assert.False(outcome.IsClean);
         Assert.NotNull(outcome.Error);
@@ -271,9 +290,9 @@ public sealed class BootRecoveryTests
         var journal = new InMemoryJournal();
         var resolver = new FakeResolver(machine);
         await new MutationLedger(journal, resolver)
-            .ApplyAsync("s1", Session(machine, resolver), Permit());
+            .ApplyAsync("s1", Session(machine, resolver), Permit(), DeadOwner);
 
-        var outcome = await BootRecovery.RunAsync(new MutationLedger(journal, resolver), default);
+        var outcome = await BootRecovery.RunAsync(new MutationLedger(journal, resolver), NobodyIsRunning, default);
         var text = outcome.Explain();
 
         Assert.False(string.IsNullOrWhiteSpace(text));
@@ -288,7 +307,14 @@ public sealed class BootRecoveryTests
     public async Task Recovery_refuses_a_null_ledger_rather_than_reporting_success()
     {
         await Assert.ThrowsAsync<ArgumentNullException>(async () =>
-            await BootRecovery.RunAsync(null!, default));
+            await BootRecovery.RunAsync(null!, NobodyIsRunning, default));
+    }
+
+    /// <summary>Every process id is gone, so every session is an orphan.</summary>
+    private sealed class NoProcessIsRunning : IProcessLiveness
+    {
+        public ValueTask<ProcessIdentity?> IdentifyAsync(int processId, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<ProcessIdentity?>(null);
     }
 
     /// <summary>A resolver whose rebuilt mutation refuses to revert one named key.</summary>

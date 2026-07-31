@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using GamerGod.Core.Forensics;
 
 namespace GamerGod.Core.Measurement;
 
@@ -32,10 +33,16 @@ public interface IFrameCapture
     CaptureSource Source { get; }
 
     /// <summary>
-    /// Captures for a duration. Returns an empty series when no data could be collected —
+    /// Captures for a duration. Returns an empty capture when no data could be collected —
     /// never a fabricated one.
+    ///
+    /// <para>
+    /// The per-frame rows come back alongside the statistics rather than being discarded once
+    /// the frame times have been read out of them. Without them there is no path from a capture
+    /// a user actually took to a stutter attribution.
+    /// </para>
     /// </summary>
-    ValueTask<FrameSeries> CaptureAsync(
+    ValueTask<CapturedFrames> CaptureAsync(
         int? processId, TimeSpan duration, CancellationToken cancellationToken);
 }
 
@@ -58,9 +65,9 @@ public sealed class UnavailableFrameCapture(string reason, string? remedy = null
         Remedy = remedy,
     };
 
-    public ValueTask<FrameSeries> CaptureAsync(
+    public ValueTask<CapturedFrames> CaptureAsync(
         int? processId, TimeSpan duration, CancellationToken cancellationToken) =>
-        ValueTask.FromResult(FrameSeries.FromFrameTimes([]));
+        ValueTask.FromResult(CapturedFrames.Empty);
 }
 
 /// <summary>
@@ -103,8 +110,8 @@ public sealed class AbRunner(IFrameCapture capture)
             };
         }
 
-        var baseline = ImmutableArray.CreateBuilder<FrameSeries>(repetitions);
-        var candidate = ImmutableArray.CreateBuilder<FrameSeries>(repetitions);
+        var baseline = ImmutableArray.CreateBuilder<CapturedFrames>(repetitions);
+        var candidate = ImmutableArray.CreateBuilder<CapturedFrames>(repetitions);
 
         for (var i = 0; i < repetitions; i++)
         {
@@ -132,7 +139,7 @@ public sealed class AbRunner(IFrameCapture capture)
         };
     }
 
-    private async ValueTask<FrameSeries> MeasureAsync(
+    private async ValueTask<CapturedFrames> MeasureAsync(
         Func<CancellationToken, ValueTask> apply,
         int? processId,
         TimeSpan duration,
@@ -148,9 +155,9 @@ public sealed record AbRun
 {
     public required CaptureSource Source { get; init; }
 
-    public required ImmutableArray<FrameSeries> Baseline { get; init; }
+    public required ImmutableArray<CapturedFrames> Baseline { get; init; }
 
-    public required ImmutableArray<FrameSeries> Candidate { get; init; }
+    public required ImmutableArray<CapturedFrames> Candidate { get; init; }
 
     public bool HasData => Source.IsAvailable && !Baseline.IsEmpty && !Candidate.IsEmpty;
 
@@ -162,14 +169,32 @@ public sealed record AbRun
             return [];
         }
 
+        var baseline = Baseline.Select(c => c.Series).ToImmutableArray();
+        var candidate = Candidate.Select(c => c.Series).ToImmutableArray();
+
         return
         [
-            AbComparison.Compare(Metric.OnePercentLowFps, Baseline, Candidate, confidenceLevel),
-            AbComparison.Compare(Metric.PointOnePercentLowFps, Baseline, Candidate, confidenceLevel),
-            AbComparison.Compare(Metric.ConsistencyPercent, Baseline, Candidate, confidenceLevel),
-            AbComparison.Compare(Metric.AverageFps, Baseline, Candidate, confidenceLevel),
+            AbComparison.Compare(Metric.OnePercentLowFps, baseline, candidate, confidenceLevel),
+            AbComparison.Compare(Metric.PointOnePercentLowFps, baseline, candidate, confidenceLevel),
+            AbComparison.Compare(Metric.ConsistencyPercent, baseline, candidate, confidenceLevel),
+            AbComparison.Compare(Metric.AverageFps, baseline, candidate, confidenceLevel),
         ];
     }
+
+    /// <summary>
+    /// Classifies the hitches in the candidate arm, over exactly the frames its half of the
+    /// verdict was computed from.
+    ///
+    /// <para>
+    /// The candidate arm alone, not both: pooling them would compute one median across two
+    /// different machine states and report causes for a machine that never existed. The arm's
+    /// runs <em>are</em> pooled with each other — they are the same state, measured repeatedly,
+    /// and a count of causes across the arm is the thing worth reading.
+    /// </para>
+    /// </summary>
+    public StutterReport AttributeCandidate(
+        double hitchMultiple = StutterAttributor.DefaultHitchMultiple) =>
+        StutterAttributor.Attribute(Candidate.SelectMany(c => c.Frames), hitchMultiple);
 
     /// <summary>
     /// A single account of the run. When there is no capture source this says so plainly

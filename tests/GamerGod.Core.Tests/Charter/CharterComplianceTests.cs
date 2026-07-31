@@ -104,16 +104,65 @@ public sealed class CharterComplianceTests
     // Article III — never inject into, hook, or modify a game.
     // ------------------------------------------------------------------
 
+    // The match is a case-insensitive substring, so a bare name also catches its suffixed and
+    // decorated forms: "SetWindowsHookEx" covers SetWindowsHookExW/A, and "DebugActiveProcess"
+    // covers DebugActiveProcessStop. Entries are therefore written in their shortest unambiguous
+    // form, and the Nt/Zw spellings of the same syscall are listed separately because neither is
+    // a substring of the other.
+    //
+    // Deliberately NOT banned, so that nobody "completes the set" later and forces the next
+    // contributor to suppress a check to do legitimate work:
+    //   OpenProcess          — required for CPU Set assignment. The control is the access mask,
+    //                          and PROCESS_ALL_ACCESS / PROCESS_VM_* are banned below.
+    //   MapViewOfFile        — maps into our OWN address space; it is how we read PresentMon's
+    //                          shared frametime buffer. Only the ...OfSection forms, which can
+    //                          target another process, are prohibited.
+    //   VirtualProtect       — the bare form operates on the calling process and the runtime
+    //                          itself uses it. Only the remote Ex form is an injection step.
+    //   GetForegroundWindow  — non-injecting and in-process. This is the sanctioned way for the
+    //                          overlay to notice the focused window changed; banning it would
+    //                          leave that requirement with no legal implementation at all.
     public static TheoryData<string, string> BannedApis() => new()
     {
         { "WriteProcessMemory", "Article III: modifying another process's memory." },
         { "ReadProcessMemory", "Article III: reading another process's memory." },
         { "CreateRemoteThread", "Article III: executing code inside another process." },
         { "NtCreateThreadEx", "Article III: executing code inside another process." },
+
+        // The ntdll route to CreateRemoteThread. Banning only the Win32 name would leave the
+        // identical capability available one layer down.
+        { "RtlCreateUserThread", "Article III: executing code inside another process." },
+
         { "VirtualAllocEx", "Article III: allocating memory inside another process." },
+
+        // Changing page protection in another process is the step immediately before writing to
+        // it, and the usual way a patcher makes a code page writable.
+        { "VirtualProtectEx", "Article III: changing memory protection in another process." },
+
         { "QueueUserAPC", "Article III: an injection primitive." },
         { "SetThreadContext", "Article III: hijacking another process's thread." },
+
+        // Manual mapping: writing a section into another process's address space is DLL
+        // injection with no LoadLibrary call to give it away.
+        { "NtMapViewOfSection", "Article III: mapping an image into another process." },
+        { "ZwMapViewOfSection", "Article III: mapping an image into another process." },
+
+        // Attaching as a debugger grants read/write of the target's memory and full control of
+        // its threads without a single other banned name appearing at the call site. Article III
+        // is about the capability, not the spelling — and a kernel anti-cheat treats a debugger
+        // attach on its protected process as a cheat outright.
+        { "DebugActiveProcess", "Article III: a debugger attach is functionally injection." },
+
         { "SetWindowsHookEx", "Article III: hooking across process boundaries." },
+
+        // The overlay needs to know when the foreground window changes, and SetWinEventHook is
+        // the obvious API for it. With WINEVENT_INCONTEXT it maps our DLL into every process
+        // that raises the event, the game included. WINEVENT_OUTOFCONTEXT does not inject — but
+        // that distinction is a flag argument at one call site, not something the type system
+        // or a reviewer's diff can hold. An anti-cheat sees the same registration either way.
+        // Poll GetForegroundWindow from the session agent instead; it touches nothing.
+        { "SetWinEventHook", "Article III: installs a cross-process hook." },
+
         { "PROCESS_ALL_ACCESS", "Least privilege: no handle may request full access." },
         { "PROCESS_VM_WRITE", "Article III: write access to another process's memory." },
         { "PROCESS_VM_OPERATION", "Article III: memory operations on another process." },

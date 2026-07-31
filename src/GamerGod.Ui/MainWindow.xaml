@@ -726,6 +726,60 @@
                                 </StackPanel>
                             </Border>
 
+                            <!--
+                                Overlay. The only toggle in GamerGod whose measured delta is a
+                                cost rather than a benefit, and it carries the same UNMEASURED
+                                badge as everything else until a session has measured it here.
+                            -->
+                            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Eyebrow}" Text="OVERLAY" />
+
+                                    <Grid Margin="0,4,0,0">
+                                        <StackPanel Margin="0,0,70,0">
+                                            <TextBlock Style="{StaticResource H2}" FontSize="13.5"
+                                                       Text="Show frame rate over your game" />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Text="A small readout in the corner: frames per second, your 1% low, and how many hitches this session." />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Margin="0,7,0,0"
+                                                       Text="It appears in games set to Borderless or Windowed, and not in games set to Fullscreen, because GamerGod draws it in a window of its own instead of drawing inside your game — and Windows will not put any window above a Fullscreen game." />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Margin="0,7,0,0"
+                                                       Text="On some games the readout costs about a frame of delay by itself. GamerGod measures that on your machine and tells you when it happens." />
+                                            <TextBlock x:Name="OverlayMeasured" Style="{StaticResource Mono}"
+                                                       FontSize="10.5" Margin="0,9,0,0"
+                                                       Text="UNMEASURED · nothing has measured what this costs on your machine" />
+                                        </StackPanel>
+                                        <CheckBox x:Name="OptOverlay" Style="{StaticResource Switch}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                  Click="Setting_Changed" />
+                                    </Grid>
+
+                                    <Rectangle Height="1" Fill="{StaticResource LineSoft}" Margin="0,14,0,14" />
+
+                                    <!--
+                                        Article IX, said out loud on the one screen where it
+                                        costs us something. RivaTuner does this better than
+                                        GamerGod can, by a method GamerGod is forbidden to use.
+                                        Pointing at it is more useful than competing with it,
+                                        and pretending otherwise would be the first dishonest
+                                        thing in the product.
+                                    -->
+                                    <TextBlock Style="{StaticResource H2}" FontSize="13.5"
+                                               Text="If you want more than this, use RivaTuner" />
+                                    <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                               Margin="0,6,0,0"
+                                               Text="RivaTuner and MSI Afterburner show GPU and CPU temperatures, clocks, voltages and per-core load, and they draw over Fullscreen games — because they run their own code inside the game. GamerGod will not do that to a game. It is the same rule that keeps it safe with anti-cheat, and this is what the rule costs." />
+                                    <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                               Margin="0,7,0,0"
+                                               Text="Both are in Get more, install through the Windows Package Manager, and are on GamerGod's protected list — it will never move or demote them. Running them alongside GamerGod is the intended arrangement, not a workaround." />
+                                    <Button Style="{StaticResource GhostButton}" Content="OPEN GET MORE"
+                                            HorizontalAlignment="Left" Margin="0,11,0,0"
+                                            Click="Overlay_OpenCatalogue" />
+                                </StackPanel>
+                            </Border>
+
                             <!-- Behaviour -->
                             <Border Style="{StaticResource Card}" Margin="0,14,0,0">
                                 <StackPanel>

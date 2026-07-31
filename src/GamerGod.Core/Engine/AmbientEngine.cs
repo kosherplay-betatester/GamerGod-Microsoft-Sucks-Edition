@@ -3,6 +3,7 @@ using GamerGod.Core.Hardware;
 using GamerGod.Core.Ledger;
 using GamerGod.Core.Mutations;
 using GamerGod.Core.Policy;
+using GamerGod.Core.Recovery;
 using GamerGod.Core.Safety;
 
 namespace GamerGod.Core.Engine;
@@ -204,6 +205,14 @@ public sealed class AmbientEngine(IAmbientOperations os, MutationLedger ledger)
     /// <summary>
     /// Applies a session. Returns a receipt describing what was done — and, when the safety
     /// gate refuses, what was not.
+    ///
+    /// <para>
+    /// <paramref name="owner"/> is the process whose death means this session has been
+    /// orphaned, and it belongs with <see cref="AmbientOptions.CallerStaysResident"/>: a
+    /// caller that lives for the whole session names itself, so a boot-recovery pass can leave
+    /// the session alone instead of ending it when the service restarts. A caller that applies
+    /// and exits names nobody, because there would be nobody left to claim it.
+    /// </para>
     /// </summary>
     public async ValueTask<SessionReceipt> EnterAsync(
         string sessionId,
@@ -212,6 +221,7 @@ public sealed class AmbientEngine(IAmbientOperations os, MutationLedger ledger)
         AmbientOptions options,
         RestoreStatus restoreStatus,
         int? gameProcessId = null,
+        ProcessIdentity? owner = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
@@ -259,7 +269,7 @@ public sealed class AmbientEngine(IAmbientOperations os, MutationLedger ledger)
         }
 
         var report = await ledger
-            .ApplyAsync(sessionId, mutations, permit, cancellationToken)
+            .ApplyAsync(sessionId, mutations, permit, owner, cancellationToken)
             .ConfigureAwait(false);
 
         return new SessionReceipt

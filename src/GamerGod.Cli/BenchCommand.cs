@@ -158,6 +158,25 @@ internal static class BenchCommand
         Console.WriteLine("  result whose range includes zero is reported as no effect — even");
         Console.WriteLine("  when the internet insists otherwise.");
 
+        // What was occupying the late frames, read from the same PresentMon columns and over the
+        // same window as the verdict above — the discarded warm-up seconds are not attributed
+        // either, or this would name causes for frames the result deliberately ignored.
+        //
+        // Ranked and worded by the report itself. Re-ranking here, or dropping the frames it
+        // could not explain, would leave a list that is entirely confident about whatever
+        // fraction of the capture happened to be answerable.
+        var stutter = run.AttributeCandidate();
+
+        Console.WriteLine();
+        Accent("  Late frames, with GamerGod on", ConsoleColor.White);
+        Console.WriteLine();
+        Console.WriteLine($"    {stutter.Explain()}");
+
+        foreach (var cause in stutter.TopCauses(3))
+        {
+            Console.WriteLine($"    {cause}");
+        }
+
         if (run.Compare().Any(r => r.Verdict == MeasurementVerdict.Regression))
         {
             Console.WriteLine();
