@@ -34,8 +34,14 @@ public sealed record RecoveryOutcome
     {
         if (Error is not null)
         {
-            return $"GamerGod could not check for changes to restore: {Error}. "
-                + "Nothing was changed by this pass. Restarting the machine still restores it.";
+            // Not "nothing was changed by this pass", which is what this said. A pass can fail
+            // before it reads anything, and it can also fail after putting several changes back
+            // — a journal write that fails mid-revert reaches here too. One sentence has to be
+            // true of both, and claiming the machine is untouched when it is half-restored is
+            // the wrong one to guess at in the only record of what happened.
+            return $"GamerGod could not finish restoring this machine: {Error}. "
+                + "Anything it had already put back stayed put back, and anything left is still "
+                + "recorded in the journal. Restarting the machine restores it.";
         }
 
         if (!HadOutstandingChanges)
@@ -148,62 +154,50 @@ public static class BootRecovery
         ArgumentNullException.ThrowIfNull(ledger);
         ArgumentNullException.ThrowIfNull(liveness);
 
-        ImmutableArray<OutstandingSession> sessions;
-        var live = ImmutableArray.CreateBuilder<string>();
-
         try
         {
-            sessions = await ledger.OutstandingSessionsAsync(cancellationToken).ConfigureAwait(false);
-
-            foreach (var session in sessions)
-            {
-                if (await IsStillOwnedAsync(session, liveness, cancellationToken).ConfigureAwait(false))
-                {
-                    live.Add(session.SessionId);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            // Includes cancellation of a probe. Nothing has been touched at this point, and
-            // saying so is better than reverting a session on a half-finished answer.
-            return new RecoveryOutcome { HadOutstandingChanges = false, Error = ex.Message };
-        }
-
-        if (sessions.IsEmpty)
-        {
-            // Deliberately writes nothing. A service that starts at every boot must not grow
-            // the journal by a line each time just to record that it had nothing to do.
-            return new RecoveryOutcome { HadOutstandingChanges = false };
-        }
-
-        var retained = live.ToImmutable();
-
-        if (retained.Length == sessions.Length)
-        {
-            // Every outstanding session still has its program. Nothing is written here either:
-            // a service restart during a long session must leave no trace at all.
-            return new RecoveryOutcome { HadOutstandingChanges = true, LeftToTheirOwner = retained };
-        }
-
-        try
-        {
-            var report = await ledger
-                .RevertExceptAsync(retained.ToHashSet(StringComparer.Ordinal), cancellationToken)
+            // Reading the journal, probing each recorded owner and reverting the orphans all
+            // happen under one hold of the journal.
+            //
+            // These were three separate steps, and only the last one locked. A session that
+            // began while the owners were being probed — the slow part, one process handle per
+            // session — was missing from the retained list and present in the journal by the
+            // time the revert read it, so the service ended a session whose user was watching.
+            // That is the failure retained sessions exist to prevent, arriving through the gap
+            // between deciding and acting.
+            var pass = await ledger
+                .RecoverOrphansAsync(
+                    (session, token) => IsStillOwnedAsync(session, liveness, token),
+                    cancellationToken)
                 .ConfigureAwait(false);
+
+            if (pass.Sessions.IsEmpty)
+            {
+                // Deliberately writes nothing. A service that starts at every boot must not grow
+                // the journal by a line each time just to record that it had nothing to do.
+                return new RecoveryOutcome { HadOutstandingChanges = false };
+            }
 
             return new RecoveryOutcome
             {
                 HadOutstandingChanges = true,
-                Report = report,
-                LeftToTheirOwner = retained,
+
+                // Null when every outstanding session still has its program, and left null: a
+                // service restart during a long session must leave no trace at all.
+                Report = pass.Report,
+                LeftToTheirOwner = pass.Retained,
             };
         }
         catch (Exception ex)
         {
-            // Includes cancellation. A stop arriving mid-pass leaves the journal dirty on
-            // purpose, so the next start picks it up rather than the record being lost.
-            return new RecoveryOutcome { HadOutstandingChanges = true, Error = ex.Message };
+            // Includes cancellation, of a probe or of the revert. A stop arriving mid-pass
+            // leaves the journal dirty on purpose, so the next start picks it up rather than the
+            // record being lost.
+            //
+            // HadOutstandingChanges is false because this pass cannot claim to know: the failure
+            // may have come before anything was read. Explain() words that case as "could not
+            // check", which is the honest reading of both.
+            return new RecoveryOutcome { HadOutstandingChanges = false, Error = ex.Message };
         }
     }
 

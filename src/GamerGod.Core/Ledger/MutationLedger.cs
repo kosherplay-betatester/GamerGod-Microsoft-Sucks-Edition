@@ -94,6 +94,22 @@ public sealed record OutstandingSession
 }
 
 /// <summary>
+/// What one orphan-recovery pass saw and did, decided and acted on under a single hold of the
+/// journal.
+/// </summary>
+public sealed record RecoveryPass
+{
+    /// <summary>Every session the journal showed as still applied when the pass looked.</summary>
+    public required ImmutableArray<OutstandingSession> Sessions { get; init; }
+
+    /// <summary>Those left alone because the process that armed them is still running.</summary>
+    public required ImmutableArray<string> Retained { get; init; }
+
+    /// <summary>Null when nothing was orphaned and therefore nothing was reverted.</summary>
+    public RevertReport? Report { get; init; }
+}
+
+/// <summary>
 /// Applies and reverses machine changes with a durable record of every step.
 ///
 /// <para>
@@ -294,6 +310,76 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
         return RevertCoreAsync(retainedSessions, cancellationToken);
     }
 
+    /// <summary>
+    /// Decides which outstanding sessions are orphans and reverts them, without ever letting go
+    /// of the journal in between.
+    ///
+    /// <para>
+    /// <b>This exists because deciding and acting were two separate scopes.</b> Boot recovery
+    /// read the outstanding sessions, probed the operating system for each recorded owner, and
+    /// then called <see cref="RevertExceptAsync"/> — which took the journal lock for the first
+    /// time, long after the list it was given had been decided. A session that began during that
+    /// window was absent from the retained set and present in the journal by the time the revert
+    /// read it, so it was reverted with its process alive and watching. That is the exact
+    /// failure the retained set was added to prevent, arriving through the gap between the two
+    /// halves of the mechanism.
+    /// </para>
+    ///
+    /// <para>
+    /// The window was not theoretical: probing is the slow part. One
+    /// <c>IProcessLiveness.IdentifyAsync</c> per session, each opening a process handle, with a
+    /// user free to press the switch throughout.
+    /// </para>
+    ///
+    /// <para>
+    /// The probe therefore runs while the journal is held, which blocks an <em>apply</em> for as
+    /// long as it takes. That is the right trade: a handful of handle opens is milliseconds, the
+    /// exclusive scope already tolerates thirty seconds before it gives up, and the alternative
+    /// is disarming somebody's live session.
+    /// </para>
+    /// </summary>
+    public async ValueTask<RecoveryPass> RecoverOrphansAsync(
+        Func<OutstandingSession, CancellationToken, ValueTask<bool>> isStillOwned,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(isStillOwned);
+
+        await using var scope = await _journal
+            .AcquireExclusiveAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var sessions = OutstandingSessionsIn(
+            await _journal.ReadAllAsync(cancellationToken).ConfigureAwait(false));
+
+        var retained = ImmutableArray.CreateBuilder<string>();
+
+        foreach (var session in sessions)
+        {
+            if (await isStillOwned(session, cancellationToken).ConfigureAwait(false))
+            {
+                retained.Add(session.SessionId);
+            }
+        }
+
+        var keep = retained.ToImmutable();
+
+        // Nothing outstanding, or nothing orphaned. Neither writes a line: a service that starts
+        // at every boot must not grow the journal just to record that it had nothing to do, and
+        // a service restart during a long session must leave no trace at all.
+        if (sessions.IsEmpty || keep.Length == sessions.Length)
+        {
+            return new RecoveryPass { Sessions = sessions, Retained = keep };
+        }
+
+        return new RecoveryPass
+        {
+            Sessions = sessions,
+            Retained = keep,
+            Report = await RevertLockedAsync(
+                keep.ToHashSet(StringComparer.Ordinal), cancellationToken).ConfigureAwait(false),
+        };
+    }
+
     private async ValueTask<RevertReport> RevertCoreAsync(
         IReadOnlySet<string>? retainedSessions, CancellationToken cancellationToken)
     {
@@ -303,6 +389,18 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
             .AcquireExclusiveAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        return await RevertLockedAsync(retainedSessions, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The revert itself. Separate from <see cref="RevertCoreAsync"/> only so
+    /// <see cref="RecoverOrphansAsync"/> can decide and revert inside a single scope — the
+    /// journal's exclusion is not reentrant, and taking it twice would deadlock rather than
+    /// nest.
+    /// </summary>
+    private async ValueTask<RevertReport> RevertLockedAsync(
+        IReadOnlySet<string>? retainedSessions, CancellationToken cancellationToken)
+    {
         var entries = await _journal.ReadAllAsync(cancellationToken).ConfigureAwait(false);
         var captures = OutstandingKeys(entries, RestartedSessions(entries));
 
@@ -525,6 +623,16 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
         CancellationToken cancellationToken = default)
     {
         var entries = await _journal.ReadAllAsync(cancellationToken).ConfigureAwait(false);
+        return OutstandingSessionsIn(entries);
+    }
+
+    /// <summary>
+    /// The same answer, from entries the caller has already read — so a caller that must decide
+    /// and act atomically can do both from one snapshot taken inside one exclusive scope.
+    /// </summary>
+    private static ImmutableArray<OutstandingSession> OutstandingSessionsIn(
+        ImmutableArray<JournalEntry> entries)
+    {
         var restarted = RestartedSessions(entries);
         var owners = new Dictionary<string, ProcessIdentity?>(StringComparer.Ordinal);
 
