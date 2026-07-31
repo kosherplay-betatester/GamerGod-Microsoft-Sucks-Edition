@@ -202,6 +202,12 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
                 // applied when the operating system already discarded every one of them.
                 MachineBootedAtUtcTicks = MachineBoot.At().UtcTicks,
 
+                // And the uptime it was derived from, which is the half that survives the clock
+                // being corrected. The instant above is UtcNow minus this, so a clock step moves
+                // it while the machine has plainly not rebooted — and reading that as a reboot
+                // makes the ledger drop a live session's captures.
+                MachineUptimeMs = MachineBoot.UptimeMs(),
+
                 // Recorded so boot recovery can tell a session orphaned by a crash from one
                 // that is still running. Both halves of the identity or neither: a bare
                 // process id cannot be told apart from the same id belonging to something
@@ -812,13 +818,16 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
     /// </summary>
     private static HashSet<string> RestartedSessions(ImmutableArray<JournalEntry> entries)
     {
+        // Both read once, so every session in one pass is judged against the same instant.
         var now = MachineBoot.At();
+        var uptime = MachineBoot.UptimeMs();
         var restarted = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
             if (entry.Op == JournalOp.SessionBegin
-                && MachineBoot.RestartedSince(entry.MachineBootedAtUtcTicks, now))
+                && MachineBoot.RestartedSince(
+                    entry.MachineBootedAtUtcTicks, entry.MachineUptimeMs, now, uptime))
             {
                 restarted.Add(entry.SessionId);
             }

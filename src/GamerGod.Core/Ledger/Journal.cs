@@ -77,6 +77,29 @@ public sealed record JournalEntry
     public long MachineBootedAtUtcTicks { get; init; }
 
     /// <summary>
+    /// How long the machine had been up when this session began, in milliseconds. Recorded on
+    /// <see cref="JournalOp.SessionBegin"/> and zero elsewhere, including in journals written
+    /// before this field existed.
+    ///
+    /// <para>
+    /// <see cref="MachineBootedAtUtcTicks"/> cannot answer the question on its own, because it is
+    /// not measured — it is <c>UtcNow - TickCount64</c>, and the wall clock is not a fixed point.
+    /// Step the clock forward and the derived boot instant moves with it while the machine has
+    /// plainly not rebooted. That is not exotic: it is an NTP correction after the machine has
+    /// been off for a while, a fresh install with a wrong RTC, or — squarely in this project's
+    /// audience — a dual boot where Linux writes local time to the RTC and Windows reads it as
+    /// UTC, which is an offset of hours.
+    /// </para>
+    ///
+    /// <para>
+    /// The uptime counter does not move when the clock does, so comparing this against the
+    /// current uptime answers "has this machine restarted" without asking the clock anything.
+    /// See <see cref="MachineBoot.RestartedSince(long, long, DateTimeOffset, long)"/>.
+    /// </para>
+    /// </summary>
+    public long MachineUptimeMs { get; init; }
+
+    /// <summary>
     /// The process that armed this session. Recorded on <see cref="JournalOp.SessionBegin"/>
     /// and zero elsewhere — an owner belongs to a session, not to an individual change.
     ///
@@ -131,9 +154,60 @@ public static class MachineBoot
     public static DateTimeOffset At() =>
         DateTimeOffset.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
 
+    /// <summary>How long this machine has been up. Unaffected by the wall clock moving.</summary>
+    public static long UptimeMs() => Environment.TickCount64;
+
     /// <summary>
     /// True when the machine has restarted since a session began — in which case every change
     /// that could not survive a reboot is already gone.
+    ///
+    /// <para>
+    /// <b>Answered from the uptime counter, and deliberately not from the clock.</b> The
+    /// wall-clock form below asks whether the derived boot instant has moved, and it moves
+    /// whenever the clock does: an NTP step, a wrong RTC, a dual boot with Linux writing local
+    /// time. A false "yes" there is the expensive direction — it makes the ledger treat a live
+    /// session's captures as already undone and drop them, so the machine stays confined with
+    /// nothing left that knows how to put it back. Uptime does not move when the clock does.
+    /// </para>
+    ///
+    /// <para>
+    /// The rule is one comparison because that is all the evidence supports. Uptime running
+    /// backwards is proof of a restart. Uptime running forwards is not proof of anything: a
+    /// machine that was up for an hour, restarted, and has now been up for two hours reports a
+    /// larger number either way, and no combination of these two clocks separates that from a
+    /// clock that was corrected. So it is reported as <em>not</em> restarted, which is the answer
+    /// that fails safely: the captures are kept and a revert is attempted against processes that
+    /// no longer exist, which the affinity revert's identity check makes a no-op. The opposite
+    /// mistake is unrecoverable.
+    /// </para>
+    ///
+    /// <para>
+    /// The case that misses is narrow in practice. Boot recovery runs as the service starts,
+    /// seconds into a boot, so the current uptime is near zero and any prior session's is larger.
+    /// </para>
+    /// </summary>
+    /// <param name="sessionBootTicks">Derived boot instant recorded with the session.</param>
+    /// <param name="sessionUptimeMs">Uptime recorded with the session; zero in older journals.</param>
+    /// <param name="now">Current derived boot instant, for the older-journal path only.</param>
+    /// <param name="nowUptimeMs">Current uptime.</param>
+    public static bool RestartedSince(
+        long sessionBootTicks, long sessionUptimeMs, DateTimeOffset now, long nowUptimeMs)
+    {
+        // Written before this field existed. The clock is all there is, so it is what gets used
+        // — the behaviour these journals were written under, kept rather than guessed at.
+        if (sessionUptimeMs <= 0)
+        {
+            return RestartedSince(sessionBootTicks, now);
+        }
+
+        // The tolerance absorbs the ordinary case of two readings taken moments apart, so a
+        // session begun microseconds ago is never read as having outlived a reboot.
+        return nowUptimeMs < sessionUptimeMs - Tolerance.TotalMilliseconds;
+    }
+
+    /// <summary>
+    /// The clock-only form, for journal entries that predate <see cref="UptimeMs"/> being
+    /// recorded. Sensitive to the wall clock moving; see the overload above.
     /// </summary>
     public static bool RestartedSince(long sessionBootTicks, DateTimeOffset now) =>
         sessionBootTicks > 0
