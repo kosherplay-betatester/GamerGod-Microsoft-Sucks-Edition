@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using GamerGod.Core.Engine;
 using GamerGod.Core.Hardware;
 using GamerGod.Core.Ledger;
@@ -17,7 +18,21 @@ internal static class SessionCommands
     // separate processes that never speak to each other except through it.
     private static string JournalPath => StateLayout.SessionJournal;
 
-    public static async Task<int> OnAsync(bool dryRun)
+    /// <summary>
+    /// Turns Game Mode on, with the levers the caller asked for.
+    ///
+    /// <para>
+    /// <paramref name="options"/> is not optional decoration. The desktop application cannot
+    /// write the revert journal — that directory is administrators-only on purpose — so it
+    /// brokers arming through this command. For a while it did that by launching
+    /// <c>gamergod on</c> with no arguments, which meant every lever the user had chosen was
+    /// discarded and this method's own defaults were applied instead: unticking "move
+    /// background apps off your game's cores" still confined them, and ticking "pause the
+    /// search indexer" stopped nothing. The confirmation dialog listed the user's settings
+    /// immediately before ignoring them.
+    /// </para>
+    /// </summary>
+    public static async Task<int> OnAsync(bool dryRun, AmbientOptions? options = null)
     {
         var operations = new WindowsAmbientOperations();
         var topology = new WindowsTopologyProvider().Classify();
@@ -37,13 +52,15 @@ internal static class SessionCommands
             "desktop session",
             new AntiCheatAssessment { Tier = AntiCheatTier.Unknown, Findings = [] });
 
-        var options = new AmbientOptions { DryRun = dryRun };
+        // DryRun is always the caller's, never the passed options', because --dry-run is a
+        // property of this invocation rather than of the configuration being applied.
+        var effective = (options ?? new AmbientOptions()) with { DryRun = dryRun };
 
         var receipt = await engine.EnterAsync(
             sessionId: Guid.NewGuid().ToString("N"),
             topology,
             permit,
-            options,
+            effective,
             await ReadRestoreStatusAsync());
 
         Console.WriteLine();
@@ -80,14 +97,41 @@ internal static class SessionCommands
         return 0;
     }
 
+    /// <summary>
+    /// Puts everything back — everything GamerGod applied, not everything one file recorded.
+    ///
+    /// <para>
+    /// This read only the session journal, and <c>gamergod bench</c> writes to a second one. So
+    /// interrupting a benchmark left every background process pinned to the ambient mask and in
+    /// efficiency mode, while <c>off</c> answered "Nothing to undo. GamerGod is not currently
+    /// changing anything." and <c>status</c> agreed. The only thing that cleaned it up was the
+    /// next reboot.
+    /// </para>
+    ///
+    /// <para>
+    /// An escape path that covers one of the two places changes are recorded is not an escape
+    /// path. The service already reads both, through <see cref="StateLayout.Journals"/>; this
+    /// now does the same.
+    /// </para>
+    /// </summary>
     public static async Task<int> OffAsync()
     {
         var operations = new WindowsAmbientOperations();
         var topology = new WindowsTopologyProvider().Classify();
-        var journal = new FileJournal(JournalPath);
-        var ledger = new MutationLedger(journal, new AmbientMutationResolver(operations, topology));
 
-        if (!await ledger.HasOutstandingChangesAsync())
+        var ledgers = StateLayout.Journals()
+            .Select(path => new MutationLedger(
+                new FileJournal(path), new AmbientMutationResolver(operations, topology)))
+            .ToArray();
+
+        var outstanding = false;
+
+        foreach (var candidate in ledgers)
+        {
+            outstanding |= await candidate.HasOutstandingChangesAsync();
+        }
+
+        if (!outstanding)
         {
             Console.WriteLine();
             Console.WriteLine("  Nothing to undo. GamerGod is not currently changing anything.");
@@ -95,7 +139,27 @@ internal static class SessionCommands
             return 0;
         }
 
-        var report = await ledger.RevertAsync();
+        var reverted = ImmutableArray.CreateBuilder<string>();
+        var failures = ImmutableArray.CreateBuilder<(string Key, string Error)>();
+        var unresolvable = ImmutableArray.CreateBuilder<string>();
+
+        foreach (var candidate in ledgers)
+        {
+            // Each journal independently. One that cannot be reverted must not stop the other
+            // from being — the same rule the ledger applies between keys.
+            var one = await candidate.RevertAsync();
+
+            reverted.AddRange(one.Reverted);
+            failures.AddRange(one.Failed);
+            unresolvable.AddRange(one.Unresolvable);
+        }
+
+        var report = new RevertReport
+        {
+            Reverted = reverted.ToImmutable(),
+            Failed = failures.ToImmutable(),
+            Unresolvable = unresolvable.ToImmutable(),
+        };
 
         Console.WriteLine();
         Accent("  Game Mode off", ConsoleColor.Green);
@@ -134,9 +198,16 @@ internal static class SessionCommands
 
     public static async Task<int> StatusAsync()
     {
-        var journal = new FileJournal(JournalPath);
-        var ledger = new MutationLedger(journal, new NullResolver());
-        var active = await ledger.HasOutstandingChangesAsync();
+        // Both journals, for the same reason 'off' reads both: a benchmark that was
+        // interrupted leaves real changes on this machine, and reporting "off" while they are
+        // applied is the one answer this command must never give.
+        var active = false;
+
+        foreach (var path in StateLayout.Journals())
+        {
+            var ledger = new MutationLedger(new FileJournal(path), new NullResolver());
+            active |= await ledger.HasOutstandingChangesAsync();
+        }
 
         Console.WriteLine();
 
@@ -145,8 +216,16 @@ internal static class SessionCommands
             Accent("  Game Mode is ON", ConsoleColor.Green);
             Console.WriteLine();
 
-            var entries = await journal.ReadAllAsync(default);
-            var outstanding = entries
+            // Listed from every journal, so a change made by an interrupted benchmark appears
+            // here rather than being applied and invisible.
+            var captures = new List<JournalEntry>();
+
+            foreach (var path in StateLayout.Journals())
+            {
+                captures.AddRange(await new FileJournal(path).ReadAllAsync(default));
+            }
+
+            var outstanding = captures
                 .Where(e => e.Op == JournalOp.Capture)
                 .Select(e => e.Description ?? e.Key)
                 .Distinct(StringComparer.Ordinal);

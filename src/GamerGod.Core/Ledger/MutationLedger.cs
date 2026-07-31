@@ -357,6 +357,19 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
 
             string? error = null;
 
+            // Every instance is attempted, even after one fails.
+            //
+            // This used to break on the first exception, and LiveInstances returns newest
+            // first, so an instance that failed permanently sat at the head of the list and
+            // every older one behind it was never reverted at all. Forget only runs on
+            // success, so the next attempt rebuilt the same order and stopped in the same
+            // place — a DomainConfinementMutation's job object stayed open for the life of the
+            // process, holding its affinity limit, while the report said only that the key
+            // could not be put back.
+            //
+            // That contradicted this class's own rule three lines below: one stubborn resource
+            // must never strand everything after it. The rule was applied between keys and not
+            // within one.
             foreach (var mutation in live)
             {
                 try
@@ -365,8 +378,10 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
                 }
                 catch (Exception ex)
                 {
-                    error = ex.Message;
-                    break;
+                    // The first failure is the one reported. Later ones are recorded in the
+                    // same line rather than overwriting it, because a key with two broken
+                    // instances is a different situation from one with a single failure.
+                    error = error is null ? ex.Message : $"{error}; {ex.Message}";
                 }
             }
 

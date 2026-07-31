@@ -367,12 +367,22 @@ defect this project has shipped was found by running against **real hardware** a
 with a test — including a protection-list entry for `hwinfo`, a process name no machine actually
 runs, which read as protection and provided none.
 
-### Four ways out, always
+### Ways out
 
 1. The switch in the app
 2. `gamergod off`
-3. Close the app — nothing it applies is boot-persistent
-4. **Reboot** — everything is back, with no GamerGod code running at all
+3. **Reboot** — everything is back, including anything that survives a restart, because the
+   service restores it before you sign in
+
+**Closing the app does not turn Game Mode off**, and this list used to say it did. The window
+can be closed while a session stays armed — that is deliberate, so the app is not a process you
+have to keep running — but it means closing it is not an escape path. Use the switch or
+`gamergod off`.
+
+The Charter names four paths including a hotkey, a controller combo and a crash watchdog. Those
+are the commitment; today the watchdog exists but nothing arms it, and there is no panic hotkey
+or controller combo. Three of the four are not built, and the Charter says so where it names
+them.
 
 ---
 
@@ -380,10 +390,12 @@ runs, which read as protection and provided none.
 
 **Shipping** — domain partitioning · efficiency-mode demotion · service suspension · power-scheme
 management · the full ledger and journal · crash recovery · **a background service that restores
-the machine at boot** · **a crash watchdog** · **stutter attribution** · the desktop app · game
+the machine at boot** · **stutter attribution** · **autotune** · the desktop app · game
 library · software catalogue · free-games browser · typo-tolerant search · opt-in release check.
 
-**Not built** — autotune. And the readout is deliberately minimal; see below.
+**Not built** — the crash watchdog is written and tested but nothing arms it, so a crash is
+recovered at the next boot rather than at the moment it happens. There is no panic hotkey and
+no controller combo. The readout is deliberately minimal; see below.
 
 ### The readout, and why RivaTuner is the better answer
 

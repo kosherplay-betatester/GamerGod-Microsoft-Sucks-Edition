@@ -114,6 +114,16 @@ Four independent escape paths, always: a keyboard hotkey, a controller combo, a
 service-side watchdog, and reboot. The fourth must work even if the first three are
 broken, because it is guaranteed by Article VI rather than by any running code.
 
+> **Built today: two and a half.** The switch in the app and `gamergod off` both work, and
+> reboot works — the service restores the machine before anyone signs in. The crash watchdog
+> is written and tested but **nothing arms it**, because the channel a session uses to hand
+> over its owner is not built. There is no panic hotkey and no controller combo; the only
+> hotkey in the product toggles the frame readout.
+>
+> This note exists because the article was being read as a description of the build rather
+> than a commitment about it, and a promise of four escape paths is worth less than an honest
+> count of the ones that exist. The commitment stands. The count is two and a half.
+
 ---
 
 ## Amendment

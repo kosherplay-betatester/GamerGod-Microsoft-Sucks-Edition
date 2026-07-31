@@ -121,7 +121,8 @@ has catalogued, GamerGod assumes the strictest possible answer.
 **Can it break my PC?**
 
 Every change is written down before it's made, and undone when you're finished. If GamerGod
-crashes, a background service undoes them. If that fails, **rebooting always works** — that's
+crashes, a background service undoes them at the next boot — not at the moment of the
+crash, because nothing arms the watchdog yet. **Rebooting always works** — that's
 guaranteed by design, not by GamerGod still running.
 
 It will never suspend your fan or pump control software, so it can't cause an overheat. It

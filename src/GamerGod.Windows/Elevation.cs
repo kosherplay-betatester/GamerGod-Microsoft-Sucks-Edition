@@ -139,7 +139,13 @@ public static class Elevation
     /// instead — which is better evidence than parsed console text anyway.
     /// </para>
     /// </summary>
-    public static async Task<ElevationResult> RunAsync(string verb, CancellationToken token)
+    /// <param name="arguments">
+    /// Everything after the verb. Not optional in practice: the desktop application's settings
+    /// only reach the privileged half through here, and when this took the verb alone every
+    /// lever the user had chosen was silently replaced by the command line's own defaults.
+    /// </param>
+    public static async Task<ElevationResult> RunAsync(
+        string verb, CancellationToken token, params string[] arguments)
     {
         if (FindCommandLineTool() is not { } tool)
         {
@@ -159,6 +165,11 @@ public static class Elevation
         };
 
         info.ArgumentList.Add(verb);
+
+        foreach (var argument in arguments ?? [])
+        {
+            info.ArgumentList.Add(argument);
+        }
 
         try
         {

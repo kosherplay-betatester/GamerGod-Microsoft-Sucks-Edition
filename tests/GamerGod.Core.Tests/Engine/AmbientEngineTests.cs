@@ -126,7 +126,12 @@ public sealed class AmbientEngineTests
 
         Assert.NotEmpty(plan);
         Assert.All(plan, m => Assert.Equal(MutationVisibility.Ambient, m.Visibility));
-        Assert.All(plan, m => Assert.False(m.IsBootPersistent));
+
+        // This used to assert that nothing in the plan was boot-persistent, which is a
+        // different claim from the one the test is named for and was not true. The power
+        // scheme is stored in the registry and survives a restart; asserting otherwise here is
+        // part of why it stayed mislabelled long enough to strand a machine's power plan.
+        // Ambient is the property this test is about, and BootPersistenceTests owns the other.
     }
 
     [Fact]

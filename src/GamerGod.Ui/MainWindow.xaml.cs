@@ -430,7 +430,14 @@ public partial class MainWindow : Window
             }
         }
 
-        var result = await Elevation.RunAsync(verb, default);
+        // The levers travel with the verb. Without them the command line applies its own
+        // defaults, which meant the dialog above listed the user's settings and the machine
+        // then got a different set — unticking confinement still confined, and ticking service
+        // suppression stopped nothing.
+        var result = turnOn
+            ? await Elevation.RunAsync(
+                verb, default, LeverArguments.Render(OptionsFromSettings(dryRun: false)))
+            : await Elevation.RunAsync(verb, default);
 
         switch (result.Outcome)
         {

@@ -101,6 +101,20 @@ public sealed class LedgerRecoveryPass : IBootRecoveryPass
         {
             HadOutstandingChanges = outcomes.Exists(o => o.HadOutstandingChanges),
             Error = errors.Length == 0 ? null : string.Join("; ", errors),
+
+            // Carried across, and it was not.
+            //
+            // StateLayout.Journals() returns two paths, so production always folds two
+            // outcomes and never takes the single-outcome shortcut above. Omitting this
+            // defaulted it to empty, and RecoveryOutcome.Explain() reads it in both of its
+            // branches: with a live session retained on one journal and a clean revert on the
+            // other, the event log said "Restored 1 change left behind by a session that ended
+            // without cleaning up. This machine is as it was." — while a session was still
+            // fully applied. Explain()'s own doc calls that text the only record anybody will
+            // ever have of what a LocalSystem service did at three in the morning, and it was
+            // lying in it.
+            LeftToTheirOwner = [.. outcomes.SelectMany(o => o.LeftToTheirOwner)],
+
             Report = reports.Length == 0
                 ? null
                 : new RevertReport

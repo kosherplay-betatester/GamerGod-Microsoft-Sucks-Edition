@@ -429,25 +429,62 @@ public sealed class PowerSchemeMutation(IAmbientOperations os, string schemeName
 
     public MutationVisibility Visibility => MutationVisibility.Ambient;
 
-    public bool IsBootPersistent => false;
+    /// <summary>
+    /// True, and it was false, and that was a Charter Article VI defect.
+    ///
+    /// <para>
+    /// Windows stores the active power scheme in the registry. It is the entire reason
+    /// <c>powercfg /setactive</c> exists, and it survives a restart exactly as intended. The
+    /// ledger reads a non-boot-persistent capture from a previous boot as "Windows already
+    /// undid this" and drops it — so arming with the power lever on and then rebooting without
+    /// reverting left the machine on GamerGod's duplicated scheme for ever, while
+    /// <c>gamergod status</c> reported nothing applied and boot recovery reported nothing to
+    /// restore. There was no code path left that would ever put the user's plan back.
+    /// </para>
+    /// </summary>
+    public bool IsBootPersistent => true;
 
     public string Describe() => $"activate the {schemeName} power scheme";
 
+    /// <summary>
+    /// Reads the active scheme and creates the duplicate, before anything is journalled.
+    ///
+    /// <para>
+    /// The duplicate is made here rather than in <see cref="ApplyAsync"/> so its identity
+    /// reaches the journal. Created during apply, it existed only in a local variable: the
+    /// capture recorded <c>null</c>, nothing ever deleted it, and every single apply left one
+    /// more scheme called "GamerGod" in the user's power plan list, permanently.
+    /// </para>
+    ///
+    /// <para>
+    /// Capture-before-apply is preserved and in fact strengthened. A crash between the two now
+    /// leaves an unused duplicate that the journal knows about and revert removes, rather than
+    /// an orphan nothing has a record of.
+    /// </para>
+    /// </summary>
     public async ValueTask<JsonElement> CaptureAsync(CancellationToken cancellationToken)
     {
         var original = await os.GetActivePowerSchemeAsync(cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.SerializeToElement(
-            new PowerCapture(original, null), AmbientJson.Default.PowerCapture);
-    }
 
-    public async ValueTask ApplyAsync(CancellationToken cancellationToken)
-    {
-        var original = await os.GetActivePowerSchemeAsync(cancellationToken).ConfigureAwait(false);
         var duplicate = await os
             .DuplicatePowerSchemeAsync(original, schemeName, cancellationToken)
             .ConfigureAwait(false);
 
-        await os.SetActivePowerSchemeAsync(duplicate, cancellationToken).ConfigureAwait(false);
+        _duplicate = duplicate;
+
+        return JsonSerializer.SerializeToElement(
+            new PowerCapture(original, duplicate), AmbientJson.Default.PowerCapture);
+    }
+
+    public async ValueTask ApplyAsync(CancellationToken cancellationToken)
+    {
+        // Capture always runs first — the ledger guarantees it — so this is set. Guarded
+        // anyway, because activating a scheme that does not exist would be worse than not
+        // activating one.
+        if (_duplicate is { } duplicate)
+        {
+            await os.SetActivePowerSchemeAsync(duplicate, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async ValueTask RevertAsync(JsonElement capture, CancellationToken cancellationToken)
@@ -459,7 +496,26 @@ public sealed class PowerSchemeMutation(IAmbientOperations os, string schemeName
         }
 
         await os.SetActivePowerSchemeAsync(state.OriginalScheme, cancellationToken).ConfigureAwait(false);
+
+        // Then remove the duplicate. Ordered this way because a scheme cannot be deleted while
+        // it is active, and because leaving the user on their own plan matters more than
+        // tidying up — if this throws, the machine is already correct and only a spare entry
+        // in a list is left behind.
+        if (state.CreatedScheme is { } created && created != state.OriginalScheme)
+        {
+            try
+            {
+                await os.DeletePowerSchemeAsync(created, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // An unused scheme in the list is a blemish. Failing the revert over it would
+                // report the machine as unrestored when it has been fully restored.
+            }
+        }
     }
+
+    private Guid? _duplicate;
 
     internal sealed record PowerCapture(Guid OriginalScheme, Guid? CreatedScheme);
 }

@@ -4,20 +4,30 @@ using System.Runtime.Versioning;
 namespace GamerGod.Windows.Native;
 
 /// <summary>
-/// GamerGod's entire native surface.
+/// Processor topology, and only that.
 ///
 /// <para>
-/// This file is the audit surface for Charter Articles II and III. Every Win32 entry point
-/// GamerGod can reach is declared here and nowhere else, so a reviewer can verify in one
-/// place that there is no injection primitive, no driver load, and no full-access process
-/// handle anywhere in the project.
+/// <b>This is not the whole native surface, and this comment used to say it was.</b> It claimed
+/// every Win32 entry point GamerGod can reach was declared here and nowhere else, and told a
+/// reviewer auditing Charter Articles II and III to read this one file. This file declares two
+/// imports. There are roughly thirty-five more — process handles and CPU Sets in
+/// <c>AmbientNativeMethods.cs</c>, device enumeration in <c>DeviceEnumeration.cs</c>, hotkeys
+/// and window styles in <c>OverlayNativeMethods.cs</c>, icon extraction in
+/// <c>IconExtractor.cs</c>. An auditor who followed the instruction saw one read-only call and
+/// signed off on a surface that includes <c>OpenProcess</c> and service control.
 /// </para>
 ///
 /// <para>
-/// Permanently banned, and asserted by <c>BannedApiTests</c>: <c>WriteProcessMemory</c>,
-/// <c>ReadProcessMemory</c>, <c>CreateRemoteThread</c>, <c>VirtualAllocEx</c>,
-/// <c>SetWindowsHookEx</c> targeting another process, <c>NtLoadDriver</c>, and any handle
-/// opened with <c>PROCESS_ALL_ACCESS</c>.
+/// The real audit surface is the <b>project</b>: <c>GamerGod.Windows</c> is the only one
+/// permitted to P/Invoke at all, and
+/// <c>CharterComplianceTests.The_native_surface_is_confined_to_one_project</c> enforces that by
+/// scanning every file under <c>src/</c>. Read the folder, not this file.
+/// </para>
+///
+/// <para>
+/// The banned list is asserted by <c>CharterComplianceTests.No_production_source_uses_a_banned_api</c>
+/// — this comment previously cited <c>BannedApiTests</c>, which does not exist and never did,
+/// so the pointer a reviewer was told to follow led nowhere.
 /// </para>
 /// </summary>
 /// <para>

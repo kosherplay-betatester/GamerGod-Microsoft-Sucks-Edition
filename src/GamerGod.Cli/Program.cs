@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using GamerGod.Cli;
+using GamerGod.Core.Engine;
 using GamerGod.Core.Hardware;
 using GamerGod.Windows;
 
@@ -47,7 +48,9 @@ try
         }
 
         case "on":
-            return await SessionCommands.OnAsync(dryRun: args.Contains("--dry-run", StringComparer.OrdinalIgnoreCase));
+            return await SessionCommands.OnAsync(
+                dryRun: args.Contains("--dry-run", StringComparer.OrdinalIgnoreCase),
+                options: LeverArguments.Parse(args));
 
         case "off":
             return await SessionCommands.OffAsync();
@@ -136,6 +139,13 @@ static void PrintUsage()
 
         OPTIONS
           --dry-run    With 'on': show exactly what would change, and change nothing
+
+          With 'on', each lever can be stated either way. Anything not given keeps
+          its default, so 'gamergod on' alone behaves exactly as it always has:
+            --confine / --no-confine          move background apps off your game's cores
+            --efficiency / --no-efficiency    set background apps to efficiency mode
+            --power / --no-power              use a high-performance power plan
+            --services / --no-services        pause the search indexer and update checks
           --json       With 'topology': emit machine-readable JSON
           --seconds N  With 'bench' and 'autotune': seconds per run (default 30)
           --runs N     With 'bench': runs per arm (default 5)

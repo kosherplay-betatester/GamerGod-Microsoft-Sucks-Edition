@@ -83,17 +83,26 @@ public sealed class AmbientMutationResolverTests
     }
 
     [Fact]
-    public void Every_resolved_mutation_is_ambient_and_dies_with_a_reboot()
+    public void Every_resolved_mutation_is_ambient()
     {
         // Nothing this resolver can rebuild may be a contact change: it is used by the boot
         // recovery pass, which has no game in front of it and no permit to consult.
+        //
+        // This test also asserted that no mutation was boot-persistent, and that assertion is
+        // gone because it was wrong and it hid a defect. The active power scheme is stored in
+        // the registry and does survive a restart, but a blanket "nothing survives a reboot"
+        // here meant marking it correctly would fail a test — so it stayed marked as dying
+        // with the process, the ledger dropped its capture after every restart, and the user's
+        // power plan was never restored.
+        //
+        // Whether each mutation's flag matches what it actually changes is a per-mutation
+        // question with a per-mutation answer, and it lives in BootPersistenceTests.
         foreach (var (_, key) in EveryMutation)
         {
             var mutation = Resolver().Resolve("t", key);
 
             Assert.NotNull(mutation);
             Assert.Equal(MutationVisibility.Ambient, mutation!.Visibility);
-            Assert.False(mutation.IsBootPersistent);
         }
     }
 
