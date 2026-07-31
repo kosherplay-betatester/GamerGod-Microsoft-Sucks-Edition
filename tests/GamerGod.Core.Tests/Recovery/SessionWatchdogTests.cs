@@ -361,6 +361,10 @@ public sealed class SessionWatchdogTests
         public ValueTask<ImmutableArray<JournalEntry>> ReadAllAsync(CancellationToken cancellationToken) =>
             throw new IOException("the journal is unreadable");
 
+        public ValueTask ReplaceAllAsync(
+            IEnumerable<JournalEntry> entries, CancellationToken cancellationToken) =>
+            throw new IOException("the journal is unreadable");
+
         public ValueTask<IAsyncDisposable> AcquireExclusiveAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<IAsyncDisposable>(new Nothing());
 

@@ -36,16 +36,43 @@ public static class StutterAttributor
     public const double DefaultHitchMultiple = 2.0;
 
     /// <summary>
-    /// Classifies every hitch in a capture.
+    /// Classifies every hitch in a single capture.
     /// </summary>
     public static StutterReport Attribute(
         IEnumerable<FrameRecord> frames, double hitchMultiple = DefaultHitchMultiple)
     {
         ArgumentNullException.ThrowIfNull(frames);
+
+        return AttributeRuns([frames], hitchMultiple);
+    }
+
+    /// <summary>
+    /// Classifies every hitch across several captures of the <em>same</em> machine state.
+    ///
+    /// <para>
+    /// <b>Why runs stay separate here.</b> The median is pooled — repeated runs of one arm are
+    /// the same state measured repeatedly, and one threshold across them is the honest one. But
+    /// the frame <em>before</em> a frame is only meaningful inside the run it was captured in.
+    /// Concatenating the runs and walking the result made the last frame of run 1 the
+    /// predecessor of the first frame of run 2 — two different PresentMon sessions, seconds or
+    /// minutes apart, with the game restarted in between. If run 1 ended in independent flip and
+    /// run 2 opened composed, rule 4 reported a transition that never happened, complete with
+    /// an evidence string naming two present modes that were never adjacent. It reads exactly
+    /// like a real finding, which is what makes it worth ruling out structurally. The first
+    /// frame of every run now has no predecessor, which is the truth about it.
+    /// </para>
+    /// </summary>
+    public static StutterReport AttributeRuns(
+        IEnumerable<IEnumerable<FrameRecord>> runs, double hitchMultiple = DefaultHitchMultiple)
+    {
+        ArgumentNullException.ThrowIfNull(runs);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(hitchMultiple, 0);
 
-        var all = frames.ToImmutableArray();
-        var frameTimes = all
+        var captures = runs.Select(r => r.ToImmutableArray()).ToImmutableArray();
+        var frameCount = captures.Sum(c => c.Length);
+
+        var frameTimes = captures
+            .SelectMany(c => c)
             .Select(f => f.MsBetweenPresents)
             .Where(t => t is > 0 && double.IsFinite(t.Value))
             .Select(t => t!.Value)
@@ -55,7 +82,7 @@ public static class StutterAttributor
         {
             return new StutterReport
             {
-                FrameCount = all.Length,
+                FrameCount = frameCount,
                 MeasuredFrameCount = 0,
                 MedianFrameTimeMs = 0,
                 HitchThresholdMs = 0,
@@ -70,35 +97,40 @@ public static class StutterAttributor
 
         var hitches = ImmutableArray.CreateBuilder<StallAttribution>();
 
-        for (var i = 0; i < all.Length; i++)
+        foreach (var capture in captures)
         {
-            var frame = all[i];
-
-            if (frame.MsBetweenPresents is not { } frameTime || frameTime <= threshold)
+            for (var i = 0; i < capture.Length; i++)
             {
-                continue;
+                var frame = capture[i];
+
+                if (frame.MsBetweenPresents is not { } frameTime || frameTime <= threshold)
+                {
+                    continue;
+                }
+
+                // The immediately preceding present in this run, whether or not it had a usable
+                // frame time — present-mode transitions are about the sequence of presents, not
+                // of timings. Null at the start of a run: there is no earlier present to compare
+                // against, and the one from the previous run is not it.
+                var previous = i > 0 ? capture[i - 1] : null;
+                var (cause, missing, evidence) = Classify(frame, previous, frameTime);
+
+                hitches.Add(new StallAttribution
+                {
+                    FrameIndex = frame.Index,
+                    TimeInMs = frame.TimeInMs,
+                    FrameTimeMs = frameTime,
+                    ExcessMs = frameTime - median,
+                    Cause = cause,
+                    Evidence = evidence,
+                    MissingColumn = missing,
+                });
             }
-
-            // The immediately preceding present, whether or not it had a usable frame time —
-            // present-mode transitions are about the sequence of presents, not of timings.
-            var previous = i > 0 ? all[i - 1] : null;
-            var (cause, missing, evidence) = Classify(frame, previous, frameTime);
-
-            hitches.Add(new StallAttribution
-            {
-                FrameIndex = frame.Index,
-                TimeInMs = frame.TimeInMs,
-                FrameTimeMs = frameTime,
-                ExcessMs = frameTime - median,
-                Cause = cause,
-                Evidence = evidence,
-                MissingColumn = missing,
-            });
         }
 
         return new StutterReport
         {
-            FrameCount = all.Length,
+            FrameCount = frameCount,
             MeasuredFrameCount = frameTimes.Length,
             MedianFrameTimeMs = median,
             HitchThresholdMs = threshold,

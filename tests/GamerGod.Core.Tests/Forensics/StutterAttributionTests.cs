@@ -44,10 +44,12 @@ public sealed class StutterAttributionTests
     private static IEnumerable<string> Steady(string mode = IndependentFlip) =>
         Enumerable.Repeat(Row("10.0", mode: mode), 20);
 
+    private static IEnumerable<FrameRecord> Parse(IEnumerable<string> rows) =>
+        PresentMonCsv.ParseFrames(
+            string.Join("\n", rows.Prepend(FrameRecordParsingTests.V2Header)));
+
     private static StutterReport Attribute(IEnumerable<string> rows) =>
-        StutterAttributor.Attribute(
-            PresentMonCsv.ParseFrames(
-                string.Join("\n", rows.Prepend(FrameRecordParsingTests.V2Header))));
+        StutterAttributor.Attribute(Parse(rows));
 
     /// <summary>A steady run with exactly one late frame, and that frame's verdict.</summary>
     private static StallAttribution OneHitch(string hitchRow, string steadyMode = IndependentFlip)
@@ -225,6 +227,67 @@ public sealed class StutterAttributionTests
 
         Assert.NotEqual(StallCause.LeftIndependentFlip, hitch.Cause);
         Assert.Equal(StallCause.Compositor, hitch.Cause);
+    }
+
+    // ------------------------------------------------------------------
+    // Run boundaries. Several runs of one arm share a median and nothing else.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void A_run_boundary_is_not_a_present_mode_transition()
+    {
+        // Two runs of the same arm. Run 1 ran in independent flip throughout; run 2 was composed
+        // from its very first frame — a second PresentMon session, with the game restarted in
+        // between. Concatenating them made run 1's last frame the predecessor of run 2's first,
+        // and rule 4 duly reported presentation "leaving independent flip" at a seam where no
+        // present followed another at all.
+        var report = StutterAttributor.AttributeRuns(
+        [
+            Parse(Steady()),
+            Parse([Row("40.0", cpuBusy: "3.0", cpuWait: "5.0", gpuBusy: "2.0", mode: ComposedFlip),
+                .. Steady(ComposedFlip)]),
+        ]);
+
+        var hitch = Assert.Single(report.Hitches);
+
+        Assert.NotEqual(StallCause.LeftIndependentFlip, hitch.Cause);
+
+        // Not Compositor either, and that is the governing rule of this file doing its job. The
+        // frame is composed, so rule 5 would match — but rule 4 sits above it and its input is
+        // genuinely unknown here, so the chain stops rather than skipping down to an answer that
+        // would look just as confident. The first frame of a run is the first frame of a
+        // capture, because that is exactly what it is.
+        Assert.Equal(StallCause.Unattributable, hitch.Cause);
+        Assert.Equal("PresentMode", hitch.MissingColumn);
+    }
+
+    [Fact]
+    public void A_transition_inside_a_run_is_still_attributed_when_runs_are_separate()
+    {
+        // The guard above must not be a blanket refusal to attribute the first frames of a run.
+        // The identical hitch, one frame later — a real transition, inside run 2 — still reads.
+        var report = StutterAttributor.AttributeRuns(
+        [
+            Parse(Steady()),
+            Parse([Row("10.0"),
+                Row("40.0", cpuBusy: "3.0", cpuWait: "5.0", gpuBusy: "2.0", mode: ComposedFlip),
+                .. Steady(ComposedFlip)]),
+        ]);
+
+        Assert.Equal(StallCause.LeftIndependentFlip, Assert.Single(report.Hitches).Cause);
+    }
+
+    [Fact]
+    public void Pooled_runs_share_one_median_and_count_every_frame()
+    {
+        // The pooling that is correct, and that the fix above must not have undone: the arm's
+        // runs are one machine state measured repeatedly, so they share a threshold.
+        var report = StutterAttributor.AttributeRuns([Parse(Steady()), Parse(Steady())]);
+
+        Assert.Equal(40, report.FrameCount);
+        Assert.Equal(40, report.MeasuredFrameCount);
+        Assert.Equal(10.0, report.MedianFrameTimeMs, 3);
+        Assert.Equal(20.0, report.HitchThresholdMs, 3);
     }
 
     [Fact]

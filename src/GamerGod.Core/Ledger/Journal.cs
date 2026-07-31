@@ -156,6 +156,28 @@ public interface IJournal
     ValueTask<ImmutableArray<JournalEntry>> ReadAllAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Replaces the entire journal with the given entries, durably.
+    ///
+    /// <para>
+    /// The single exception to append-only, and it exists because append-only alone is not a
+    /// design that survives contact with a machine that stays on for months. Every armed
+    /// session, every benchmark run and every autotune arm appends captures — an affinity
+    /// capture carries a record per background process — and nothing ever removed a line. The
+    /// file that grows without bound is the file <c>gmsvc</c> parses as LocalSystem at every
+    /// boot, before anyone has signed in, so the cost of ignoring this lands on startup and
+    /// keeps getting worse.
+    /// </para>
+    ///
+    /// <para>
+    /// Callers must hold <see cref="AcquireExclusiveAsync"/> and must have decided what to keep
+    /// from a read taken inside that same scope. An implementation writes the replacement
+    /// somewhere else first and puts it in place in one step: a journal half-written when the
+    /// power goes is worse than one that is merely large.
+    /// </para>
+    /// </summary>
+    ValueTask ReplaceAllAsync(IEnumerable<JournalEntry> entries, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Takes exclusive ownership of this journal until the returned scope is disposed.
     ///
     /// <para>
@@ -231,6 +253,21 @@ public sealed class InMemoryJournal : IJournal
 
     public ValueTask<ImmutableArray<JournalEntry>> ReadAllAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult(_entries.ToImmutableArray());
+
+    public ValueTask ReplaceAllAsync(
+        IEnumerable<JournalEntry> entries, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+
+        // Materialised before the clear, because the caller's sequence is routinely a LINQ query
+        // over ReadAllAsync — lazy, and emptying the list first would make it yield nothing.
+        var kept = entries.ToArray();
+
+        _entries.Clear();
+        _entries.AddRange(kept);
+
+        return ValueTask.CompletedTask;
+    }
 
     /// <summary>
     /// A copy holding only what reached durable storage, used by the chaos tests to model a
@@ -417,6 +454,65 @@ public sealed class FileJournal(string path) : IJournal
         }
 
         return entries.ToImmutable();
+    }
+
+    /// <summary>
+    /// Writes the replacement beside the journal, flushes it to the device, and moves it over
+    /// the original in one step.
+    ///
+    /// <para>
+    /// The order is the whole of it. Truncating in place would open a window — however brief —
+    /// in which the machine is modified and the file that says so is empty, and a power cut
+    /// inside that window is unrecoverable by construction: nothing else on disk knows what was
+    /// changed. Writing elsewhere means the original stays intact and complete until a
+    /// replacement exists that is also intact and complete, and the move between them is a
+    /// single filesystem operation. A crash leaves one or the other, never neither.
+    /// </para>
+    /// </summary>
+    public async ValueTask ReplaceAllAsync(
+        IEnumerable<JournalEntry> entries, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+
+        var lines = entries
+            .Select(e => JsonSerializer.Serialize(e, JournalJsonContext.Default.JournalEntry))
+            .ToArray();
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var directory = Path.GetDirectoryName(_path);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            // Beside the journal, not in the temp directory: File.Move is only atomic within a
+            // volume, and %TEMP% is not guaranteed to be on the same one.
+            var staged = _path + ".compacting";
+
+            await using (var stream = new FileStream(
+                staged, FileMode.Create, FileAccess.Write, FileShare.None,
+                bufferSize: 4096, FileOptions.WriteThrough))
+            {
+                await using var writer = new StreamWriter(stream);
+
+                foreach (var line in lines)
+                {
+                    await writer.WriteAsync((line + "\n").AsMemory(), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(staged, _path, overwrite: true);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 }
 

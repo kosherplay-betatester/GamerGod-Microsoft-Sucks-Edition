@@ -321,16 +321,57 @@ public sealed class AffinityConfinementMutation(
         }
     }
 
+    /// <summary>
+    /// Puts back the masks that were captured — onto the processes they were captured from, and
+    /// no others.
+    ///
+    /// <para>
+    /// <b>A pid on its own is not an identity.</b> Windows recycles process ids aggressively,
+    /// and this method is documented to run from a cold process minutes or hours after the
+    /// capture — after a crash, from the watchdog, from <c>gamergod off</c> in a new shell. Every
+    /// pid in the journal may by then belong to something else entirely. This wrote each
+    /// captured mask to a bare pid with nothing checking who held it, so a recycled pid meant
+    /// setting a background process's affinity onto a stranger. The stranger it must never be is
+    /// the game: the target list excludes it at capture time, but pid recycling puts it back in
+    /// reach, and pinning a game's threads to the ambient cores is a Contact change to a title
+    /// that may be running kernel anti-cheat — Article I, reached through a revert path whose
+    /// entire purpose is to leave the machine alone.
+    /// </para>
+    ///
+    /// <para>
+    /// So the name is checked, which is what the capture has been recording it for. It is not a
+    /// perfect identity — a second <c>chrome.exe</c> could inherit the first one's pid — but the
+    /// case it rules out completely is the one that matters, and restoring a background app's own
+    /// mask onto another instance of that same app is not a harm worth a P/Invoke to prevent.
+    /// A pid we cannot account for is left alone: if it is dead the revert was a no-op anyway,
+    /// and if it is alive and unreadable then it was never ours to write to.
+    /// </para>
+    /// </summary>
     public async ValueTask RevertAsync(JsonElement capture, CancellationToken cancellationToken)
     {
         var state = capture.Deserialize(AmbientJson.Default.AffinityCapture);
-        if (state is null)
+        if (state is null || state.Processes.IsDefaultOrEmpty)
         {
             return;
         }
 
+        // Read once, before anything is written. Not swallowed: a revert that cannot establish
+        // who is who has not restored the machine, and the ledger records a failed revert and
+        // carries on to the rest. Silence here would read as success.
+        // Grouped rather than keyed directly: a duplicate pid in an enumeration would throw out
+        // of ToDictionary, and a revert path is the worst place to learn that.
+        var live = (await os.ListProcessesAsync(cancellationToken).ConfigureAwait(false))
+            .GroupBy(p => p.Id)
+            .ToDictionary(g => g.Key, g => g.First().Name);
+
         foreach (var record in state.Processes)
         {
+            if (!live.TryGetValue(record.Id, out var name)
+                || !string.Equals(name, record.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             try
             {
                 await os.SetAffinityAsync(
@@ -341,11 +382,15 @@ public sealed class AffinityConfinementMutation(
             }
             catch (Exception)
             {
-                // The process exited, which achieves the same thing: its affinity went with it.
+                // Exited between the listing above and this write, which achieves the same
+                // thing: its affinity went with it.
             }
         }
     }
 
+    /// <param name="Id">Pid at capture time. Meaningless on its own by revert time — see
+    /// <see cref="RevertAsync"/>.</param>
+    /// <param name="Name">What held that pid, so revert can tell whether it still does.</param>
     internal sealed record AffinityRecord(int Id, string Name, ushort Group, ulong Mask);
 
     internal sealed record AffinityCapture(ImmutableArray<AffinityRecord> Processes);

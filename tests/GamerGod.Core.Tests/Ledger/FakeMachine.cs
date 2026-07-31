@@ -176,6 +176,23 @@ internal sealed class CrashingJournal(IJournal inner, int crashAfterWrites) : IJ
     public ValueTask<System.Collections.Immutable.ImmutableArray<JournalEntry>> ReadAllAsync(
         CancellationToken cancellationToken) => inner.ReadAllAsync(cancellationToken);
 
+    /// <summary>
+    /// Counted as a write and able to crash, like any other. Compaction rewrites the file that
+    /// every recovery path depends on, so the chaos tests must be able to kill the machine
+    /// during one — and find the journal still describing the machine afterwards.
+    /// </summary>
+    public async ValueTask ReplaceAllAsync(
+        IEnumerable<JournalEntry> entries, CancellationToken cancellationToken)
+    {
+        if (Writes >= crashAfterWrites)
+        {
+            throw new SimulatedCrash();
+        }
+
+        Writes++;
+        await inner.ReplaceAllAsync(entries, cancellationToken).ConfigureAwait(false);
+    }
+
     // Delegated so the chaos tests exercise the real exclusion path. A crash while holding
     // the scope must still release it, which is what the cold-recovery assertions depend on.
     public ValueTask<IAsyncDisposable> AcquireExclusiveAsync(CancellationToken cancellationToken) =>

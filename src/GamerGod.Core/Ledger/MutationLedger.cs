@@ -421,14 +421,86 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
             Unresolvable = unresolvable.ToImmutable(),
         };
 
-        if (report.IsClean && outstanding.Length > 0)
+        // One per session that actually ended, not one naming whichever session happened to sort
+        // first. A revert routinely spans more than one: a crashed session and the one that
+        // replaced it are both outstanding, and both are put back by the same pass. Naming only
+        // outstanding[0] left every other session in the journal with no terminal entry, so the
+        // record said they were still applied for ever after — and Compact below, which is the
+        // only thing that stops these files growing without bound, would have believed it.
+        if (report.IsClean)
         {
-            await _journal.AppendAsync(
-                new JournalEntry { Op = JournalOp.SessionEnd, SessionId = outstanding[0].SessionId },
-                cancellationToken).ConfigureAwait(false);
+            foreach (var session in outstanding
+                .Select(e => e.SessionId)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal))
+            {
+                await _journal.AppendAsync(
+                    new JournalEntry { Op = JournalOp.SessionEnd, SessionId = session },
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
 
+        // Still inside the exclusive scope, which is the only place this is safe.
+        await CompactAsync(cancellationToken).ConfigureAwait(false);
+
         return report;
+    }
+
+    /// <summary>
+    /// Above this many lines, a revert drops the history of sessions that are finished with.
+    ///
+    /// <para>
+    /// High enough that an ordinary machine never reaches it and the journal stays a readable
+    /// account of recent sessions — which is what a user or an auditor opens it for. A single
+    /// armed session writes on the order of ten lines, so this is hundreds of sessions.
+    /// </para>
+    /// </summary>
+    private const int CompactionThreshold = 2000;
+
+    /// <summary>
+    /// Drops journal lines that describe nothing about the machine's current state.
+    ///
+    /// <para>
+    /// <b>What is kept is decided by the same function that decides what to revert.</b> A
+    /// session survives compaction when it still owns an outstanding key —
+    /// <see cref="OutstandingKeys"/>, the one place in this class that defines "still applied",
+    /// including its rule that a non-boot-persistent capture from a previous boot is already
+    /// undone. Anything a second definition kept or dropped differently would eventually
+    /// disagree with the revert path, and the direction it disagreed in would decide whether the
+    /// machine could be put back.
+    /// </para>
+    ///
+    /// <para>
+    /// A retained session keeps <em>all</em> of its lines, not just the outstanding captures.
+    /// Its <see cref="JournalOp.SessionBegin"/> carries the boot timestamp that
+    /// <see cref="RestartedSessions"/> reads, and dropping that would make a pre-reboot session
+    /// look current — reversing the very rule this method depends on.
+    /// </para>
+    ///
+    /// <para>
+    /// The caller must already hold the journal's exclusive scope. Reading, deciding and
+    /// replacing are three steps, and a concurrent apply landing between the first and the third
+    /// would be erased by it.
+    /// </para>
+    /// </summary>
+    private async ValueTask CompactAsync(CancellationToken cancellationToken)
+    {
+        var entries = await _journal.ReadAllAsync(cancellationToken).ConfigureAwait(false);
+
+        if (entries.Length < CompactionThreshold)
+        {
+            return;
+        }
+
+        var keep = OutstandingKeys(entries, RestartedSessions(entries))
+            .Values
+            .SelectMany(k => k.Sessions)
+            .ToHashSet(StringComparer.Ordinal);
+
+        await _journal
+            .ReplaceAllAsync(
+                entries.Where(e => keep.Contains(e.SessionId)).ToArray(), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     /// <summary>

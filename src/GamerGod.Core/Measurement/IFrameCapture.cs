@@ -191,10 +191,18 @@ public sealed record AbRun
     /// runs <em>are</em> pooled with each other — they are the same state, measured repeatedly,
     /// and a count of causes across the arm is the thing worth reading.
     /// </para>
+    ///
+    /// <para>
+    /// Handed over as separate runs rather than concatenated. Pooling the median across them is
+    /// right; pooling the <em>sequence</em> is not, and this used to do both — see
+    /// <see cref="StutterAttributor.AttributeRuns"/> for the transition it invented at each run
+    /// boundary.
+    /// </para>
     /// </summary>
     public StutterReport AttributeCandidate(
         double hitchMultiple = StutterAttributor.DefaultHitchMultiple) =>
-        StutterAttributor.Attribute(Candidate.SelectMany(c => c.Frames), hitchMultiple);
+        StutterAttributor.AttributeRuns(
+            Candidate.Select(c => c.Frames.AsEnumerable()), hitchMultiple);
 
     /// <summary>
     /// A single account of the run. When there is no capture source this says so plainly

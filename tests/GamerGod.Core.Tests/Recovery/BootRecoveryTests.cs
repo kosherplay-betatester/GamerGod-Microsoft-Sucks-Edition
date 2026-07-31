@@ -336,6 +336,10 @@ public sealed class BootRecoveryTests
         public ValueTask<ImmutableArray<JournalEntry>> ReadAllAsync(CancellationToken cancellationToken) =>
             throw new IOException("the disk holding the journal is not readable");
 
+        public ValueTask ReplaceAllAsync(
+            IEnumerable<JournalEntry> entries, CancellationToken cancellationToken) =>
+            throw new IOException("the disk holding the journal is not readable");
+
         public ValueTask<IAsyncDisposable> AcquireExclusiveAsync(CancellationToken cancellationToken) =>
             throw new IOException("the disk holding the journal is not readable");
     }

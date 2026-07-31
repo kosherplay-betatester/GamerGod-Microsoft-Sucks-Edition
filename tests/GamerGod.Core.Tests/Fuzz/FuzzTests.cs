@@ -423,6 +423,59 @@ public sealed class JournalResilienceTests
     }
 
     [Fact]
+    public async Task Compaction_replaces_the_file_on_disk_and_leaves_nothing_behind()
+    {
+        // The on-disk half of compaction: the in-memory journal cannot show that the staged file
+        // is cleaned up, that the replacement is readable, or that appends still land after it.
+        var directory = Path.Combine(Path.GetTempPath(), "gamergod-tests", Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "session.journal");
+
+        try
+        {
+            var journal = new FileJournal(path);
+
+            foreach (var i in Enumerable.Range(0, 20))
+            {
+                await journal.AppendAsync(
+                    new JournalEntry
+                    {
+                        Op = JournalOp.Capture,
+                        SessionId = i < 10 ? "old" : "live",
+                        Key = $"key{i}",
+                        MutationType = "Stub",
+                        State = "{}",
+                    },
+                    default);
+            }
+
+            var all = await journal.ReadAllAsync(default);
+            await journal.ReplaceAllAsync(all.Where(e => e.SessionId == "live"), default);
+
+            var kept = await journal.ReadAllAsync(default);
+            Assert.Equal(10, kept.Length);
+            Assert.All(kept, e => Assert.Equal("live", e.SessionId));
+
+            // No staging file left in the state directory for a user or an auditor to puzzle over.
+            Assert.Empty(Directory.GetFiles(directory, "*.compacting"));
+
+            // And the file is still a journal: appends land after the replacement, in order.
+            await journal.AppendAsync(
+                new JournalEntry { Op = JournalOp.SessionEnd, SessionId = "live" }, default);
+
+            var after = await journal.ReadAllAsync(default);
+            Assert.Equal(11, after.Length);
+            Assert.Equal(JournalOp.SessionEnd, after[^1].Op);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task Concurrent_writers_never_corrupt_a_line()
     {
         var directory = Path.Combine(Path.GetTempPath(), "gamergod-tests", Guid.NewGuid().ToString("N"));
