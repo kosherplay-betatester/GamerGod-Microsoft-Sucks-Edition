@@ -55,6 +55,9 @@ try
         case "status":
             return await SessionCommands.StatusAsync();
 
+        case "autotune":
+            return await AutotuneCommand.RunAsync(args);
+
         case "bench":
             return await BenchCommand.RunAsync(args);
 
@@ -123,6 +126,7 @@ static void PrintUsage()
           status       Show whether Game Mode is on, and what it changed
 
           bench        Measure whether any of it actually helps, on your hardware
+          autotune     Measure every setting and keep only what measurably helped
 
           scan         Check this machine for things that cost you frames or block launches
           topology     Show this machine's performance domains and the routing plan
@@ -133,9 +137,10 @@ static void PrintUsage()
         OPTIONS
           --dry-run    With 'on': show exactly what would change, and change nothing
           --json       With 'topology': emit machine-readable JSON
-          --seconds N  With 'bench': seconds per run (default 30)
+          --seconds N  With 'bench' and 'autotune': seconds per run (default 30)
           --runs N     With 'bench': runs per arm (default 5)
-          --pid N      With 'bench': measure a specific process
+                       With 'autotune': runs per arm (minimum 7, and it refuses fewer)
+          --pid N      With 'bench' and 'autotune': measure a specific process
 
         'scan', 'topology' and 'status' only read - they change nothing.
 
