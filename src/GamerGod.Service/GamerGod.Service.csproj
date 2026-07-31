@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+
+    <!--
+      install/Install-GamerGod.ps1 registers "gmsvc.exe" and skips service registration
+      cleanly when that file is absent. Renaming this assembly does not break the build; it
+      quietly stops the service being installed at all.
+    -->
+    <AssemblyName>gmsvc</AssemblyName>
+    <RootNamespace>GamerGod.Service</RootNamespace>
+
+    <!--
+      Self-contained, for the same reason the command line is: this runs as LocalSystem at
+      boot, and a service that cannot start because the machine has no .NET runtime is a
+      service that is not there on the one morning it was needed.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+
+    <!--
+      No P/Invoke lives here. Anything that needs a handle, a process wait or a token check
+      goes in GamerGod.Windows, which is the single folder a reviewer has to read to see
+      everything GamerGod can ask the operating system to do. A Charter test enforces it.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GamerGod.Core\GamerGod.Core.csproj" />
+    <ProjectReference Include="..\GamerGod.Windows\GamerGod.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

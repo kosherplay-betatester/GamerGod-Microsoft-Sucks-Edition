@@ -36,7 +36,7 @@ Step 'Cleaning previous payload'
 #
 # Wrapped in @() because Set-StrictMode -Version Latest refuses .Count on the bare object a
 # single match unrolls to - and one match is by far the likeliest case here.
-$running = @(Get-Process -Name 'GamerGod', 'gamergod' -ErrorAction SilentlyContinue |
+$running = @(Get-Process -Name 'GamerGod', 'gamergod', 'gmsvc' -ErrorAction SilentlyContinue |
     Where-Object { $_.Path -and $_.Path.StartsWith($payload, [StringComparison]::OrdinalIgnoreCase) })
 
 if ($running.Count -gt 0) {
@@ -84,12 +84,15 @@ New-Item -ItemType Directory -Force -Path $appPayload | Out-Null
     --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Desktop app publish failed.' }
 
-# The service ships later; stage it automatically once it exists so this script does not
-# need editing on the day it lands.
+# The background service. Publish settings come from the project rather than from here:
+# it is self-contained for the same reason the command line is, and more urgently, because
+# it runs as LocalSystem at boot. A service that will not start because the machine has no
+# .NET runtime is a service that is missing on the one morning it was needed - and the
+# installer would fail at Start-Service with an error about a runtime nobody asked for.
 $servicePath = Join-Path $root 'src\GamerGod.Service\GamerGod.Service.csproj'
 if (Test-Path $servicePath) {
     Step 'Publishing the background service'
-    & dotnet publish $servicePath -c $Configuration -r win-x64 --self-contained false -o $payload --nologo
+    & dotnet publish $servicePath -c $Configuration -o $payload --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Service publish failed.' }
 }
 else {

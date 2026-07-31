@@ -84,11 +84,12 @@ internal static class BenchCommand
 
         var operations = new WindowsAmbientOperations();
         var topology = new WindowsTopologyProvider().Classify();
-        var journalPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "GamerGod", "state", "bench.journal");
 
-        var ledger = new MutationLedger(new FileJournal(journalPath), new BenchResolver(operations, topology));
+        // Kept apart from the session journal so a run that applies and reverts many times
+        // cannot interleave its record with a user's live session.
+        var ledger = new MutationLedger(
+            new FileJournal(StateLayout.BenchJournal),
+            new AmbientMutationResolver(operations, topology));
         var engine = new AmbientEngine(operations, ledger);
 
         var permit = GameIntegrityPolicy.Evaluate(
@@ -221,24 +222,5 @@ internal static class BenchCommand
         Console.ForegroundColor = colour;
         Console.Write(text);
         Console.ForegroundColor = previous;
-    }
-
-    private sealed class BenchResolver(IAmbientOperations os, CpuTopology topology) : IMutationResolver
-    {
-        public IMutation? Resolve(string mutationType, string key)
-        {
-            if (key.StartsWith("service:", StringComparison.Ordinal))
-            {
-                return new ServiceSuspensionMutation(os, key["service:".Length..]);
-            }
-
-            return key switch
-            {
-                "ecoqos:background" => new EfficiencyModeMutation(os, []),
-                "power:scheme" => new PowerSchemeMutation(os, "GamerGod"),
-                "affinity:ambient-domain" => new AffinityConfinementMutation(os, default, [], topology),
-                _ => null,
-            };
-        }
     }
 }

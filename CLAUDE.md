@@ -40,18 +40,23 @@ benefit with real frametime data, and restores the machine exactly on exit or cr
 
 ```
 GamerGod.Core          pure domain — mutations, ledger, policy, catalogue, search,
-                       measurement. NO OS calls. Engine/ and Measurement/ are namespaces
-                       inside this project, not separate projects.
+                       measurement, forensics, recovery. NO OS calls. Engine/, Measurement/,
+                       Forensics/ and Recovery/ are namespaces here, not separate projects.
 GamerGod.Windows       the ONLY project that P/Invokes. NativeMethods.txt is the audit surface.
 GamerGod.Ui            the WPF desktop app
 GamerGod.Cli           gamergod.exe — and the privileged broker the app shells out to
+GamerGod.Service       gmsvc.exe. LocalSystem: boot recovery + crash watchdog. Zero P/Invoke;
+                       its native work lives in GamerGod.Windows like everything else.
 ```
 
-**Not built, and this list must not imply otherwise:** `GamerGod.Service` (LocalSystem broker,
-watchdog, boot recovery) and `GamerGod.Sentinel` (per-session agent: hotkeys, overlay). The
-elevation broker today is the CLI, invoked with `runas`. An earlier version of this section
-listed both as though they existed, and that error was copied into the README before anyone
-checked the solution file.
+**Not built, and this list must not imply otherwise:** `GamerGod.Sentinel` (per-session agent).
+The overlay is planned as a folder in `GamerGod.Ui`, not a second process. The service does not
+yet broker elevation either — it has no IPC channel, so arming still shells out to the CLI with
+`runas`, and nothing arms the watchdog in production yet.
+
+*Keep this section true.* It has been wrong twice: it once listed `Abstractions`, `Engine`,
+`Bench`, `Service` and `Sentinel` as projects when four of them did not exist, and the README
+copied that. Then it was corrected to say `Service` was not built, on the same day one was.
 
 **`Core` must not reference `GamerGod.Windows`.** An architecture test enforces
 this. It is what makes the chaos tests possible — they run the whole ledger against a

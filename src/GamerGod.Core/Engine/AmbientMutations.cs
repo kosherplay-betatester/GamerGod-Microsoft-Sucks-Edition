@@ -256,12 +256,22 @@ public sealed class AffinityConfinementMutation(
             try
             {
                 var mask = await os.GetAffinityAsync(process.Id, cancellationToken).ConfigureAwait(false);
+
+                // Only what apply is going to touch. A process in another processor group is
+                // left alone below, and journalling a restore point for something we never
+                // changed would mean revert writing to a process we never opened.
+                if (mask.Group != ambientMask.Group)
+                {
+                    continue;
+                }
+
                 captured.Add(new AffinityRecord(process.Id, process.Name, mask.Group, mask.Mask));
             }
             catch (Exception)
             {
-                // Exited between listing and capture. Skipping is correct; a process we
-                // never changed needs no record.
+                // Exited between listing and capture, or spans processor groups and therefore
+                // has no single mask to restore. Skipping is correct; a process we never
+                // changed needs no record.
             }
         }
 
@@ -287,6 +297,21 @@ public sealed class AffinityConfinementMutation(
 
             try
             {
+                // Re-read rather than trusting the capture, because a process can migrate
+                // between the two - vanishingly rarely, and this is the only check standing
+                // between that and a wrong answer.
+                //
+                // A mask is meaningless outside the group it was built for: bit 3 of group 0
+                // and bit 3 of group 1 are different processors, and Windows applies a mask
+                // relative to the group the process is already in. Writing the game group's
+                // mask onto a process elsewhere would move it to cores nobody chose. There is
+                // nothing useful to do for such a process, so it is left exactly as it is.
+                var current = await os.GetAffinityAsync(process.Id, cancellationToken).ConfigureAwait(false);
+                if (current.Group != ambientMask.Group)
+                {
+                    continue;
+                }
+
                 await os.SetAffinityAsync(process.Id, ambientMask, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception)

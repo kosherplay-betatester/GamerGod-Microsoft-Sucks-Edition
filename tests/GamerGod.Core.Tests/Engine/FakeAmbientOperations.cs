@@ -41,6 +41,22 @@ internal sealed class FakeAmbientOperations : IAmbientOperations
         return this;
     }
 
+    /// <summary>
+    /// Puts a process in a named processor group with a starting affinity mask.
+    ///
+    /// <para>
+    /// Only machines with more than 64 logical processors have a second group, so this is
+    /// how a 32-thread development box gets to exercise the code paths that only exist on a
+    /// Threadripper. Processes not placed explicitly behave as they always did: group zero,
+    /// unrestricted.
+    /// </para>
+    /// </summary>
+    public FakeAmbientOperations PlaceInGroup(int id, ushort group, ulong mask)
+    {
+        _affinity[id] = new ProcessorMask(group, mask);
+        return this;
+    }
+
     public FakeAmbientOperations AddService(string name, bool running, string startType = "Automatic")
     {
         _services[name] = new ServiceInfo(name, running, startType);
@@ -121,6 +137,17 @@ internal sealed class FakeAmbientOperations : IAmbientOperations
         if (mask.IsEmpty)
         {
             throw new ArgumentException("empty affinity would make the process unschedulable");
+        }
+
+        // Windows applies a mask relative to the group the process already belongs to, so a
+        // mask built for another group does not fail - it silently selects different
+        // processors. The real implementation refuses it rather than letting that happen,
+        // and the simulated machine has to refuse it too or the tests would prove nothing.
+        var current = AffinityOf(processId);
+        if (current.Group != mask.Group)
+        {
+            throw new InvalidOperationException(
+                $"process {processId} runs in group {current.Group}; refusing a group {mask.Group} mask");
         }
 
         _affinity[processId] = mask;

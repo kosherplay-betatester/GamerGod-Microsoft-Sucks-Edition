@@ -9,6 +9,20 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <InvariantGlobalization>true</InvariantGlobalization>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!--
+      Tests tagged Host=VM touch the real operating system: they stop services, change this
+      machine's processor affinity and kill the shell. CLAUDE.md has always said a plain
+      `dotnet test` is safe to run on a development box, and this is what makes that true
+      rather than true-by-accident because no such test had been written yet.
+
+      The condition matters. A filter passed to `dotnet test` arrives as an MSBuild global
+      property, which a project-level assignment cannot override, so passing one replaces
+      this default and running exactly the VM suite still works. A TestCaseFilter in a
+      .runsettings file does NOT behave that way: VSTest ANDs the two together, which would
+      leave the VM tests unrunnable by any command at all.
+    -->
+    <VSTestTestCaseFilter Condition="'$(VSTestTestCaseFilter)' == ''">Host!=VM</VSTestTestCaseFilter>
   </PropertyGroup>
 
   <PropertyGroup>

@@ -214,10 +214,43 @@ public sealed class WindowsAmbientOperations : IAmbientOperations
         }
     }
 
+    /// <summary>
+    /// Reads a process's affinity <em>and the group it is relative to</em>.
+    ///
+    /// <para>
+    /// This used to report group zero for everything, because <c>Process.ProcessorAffinity</c>
+    /// has no way to say otherwise. On a machine with more than 64 logical processors that
+    /// journals a restore point naming the wrong processors, and revert-exactly is the whole
+    /// guarantee. Invisible on any consumer part; wrong on every Threadripper and Xeon.
+    /// </para>
+    /// </summary>
     public ValueTask<ProcessorMask> GetAffinityAsync(int processId, CancellationToken cancellationToken)
     {
-        using var process = Process.GetProcessById(processId);
-        return ValueTask.FromResult(new ProcessorMask(0, (ulong)(nint)process.ProcessorAffinity));
+        var handle = AmbientNativeMethods.OpenProcess(
+            AmbientNativeMethods.ProcessQueryLimitedInformation, false, (uint)processId);
+
+        if (handle == IntPtr.Zero)
+        {
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error(), $"Cannot read the affinity of process {processId}.");
+        }
+
+        try
+        {
+            var group = GroupOf(handle, processId);
+
+            if (!AmbientNativeMethods.GetProcessAffinityMask(handle, out var mask, out _))
+            {
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(), $"Cannot read the affinity mask of process {processId}.");
+            }
+
+            return ValueTask.FromResult(new ProcessorMask(group, (ulong)mask));
+        }
+        finally
+        {
+            AmbientNativeMethods.CloseHandle(handle);
+        }
     }
 
     public ValueTask SetAffinityAsync(
@@ -231,9 +264,80 @@ public sealed class WindowsAmbientOperations : IAmbientOperations
                 nameof(mask));
         }
 
-        using var process = Process.GetProcessById(processId);
-        process.ProcessorAffinity = (nint)mask.Mask;
+        // PROCESS_QUERY_LIMITED_INFORMATION to read the group, PROCESS_SET_INFORMATION to
+        // write the mask. Nothing wider.
+        var handle = AmbientNativeMethods.OpenProcess(
+            AmbientNativeMethods.ProcessQueryLimitedInformation | AmbientNativeMethods.ProcessSetInformation,
+            false,
+            (uint)processId);
+
+        if (handle == IntPtr.Zero)
+        {
+            throw new Win32Exception(
+                Marshal.GetLastWin32Error(), $"Cannot open process {processId} to set its affinity.");
+        }
+
+        try
+        {
+            var group = GroupOf(handle, processId);
+
+            if (group != mask.Group)
+            {
+                // Windows would not fail this - it would apply the mask relative to the group
+                // the process is already in, quietly selecting different processors. That is
+                // exactly the silent wrong answer this refusal exists to prevent, and it is
+                // also a mask we could never claim to have restored exactly.
+                throw new InvalidOperationException(
+                    $"Refusing to write a group {mask.Group} affinity mask onto process "
+                    + $"{processId}, which runs in group {group}. The same bits name different "
+                    + "processors in each group.");
+            }
+
+            if (!AmbientNativeMethods.SetProcessAffinityMask(handle, (UIntPtr)mask.Mask))
+            {
+                throw new Win32Exception(
+                    Marshal.GetLastWin32Error(), $"Cannot set the affinity of process {processId}.");
+            }
+        }
+        finally
+        {
+            AmbientNativeMethods.CloseHandle(handle);
+        }
+
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// The single processor group a process belongs to.
+    ///
+    /// <para>
+    /// A process whose threads span groups has no single affinity mask, so there is nothing
+    /// GamerGod could capture that it could put back exactly. Refusing is the only honest
+    /// answer available: the alternative is a journal entry claiming a restore point that
+    /// process never had.
+    /// </para>
+    /// </summary>
+    private static ushort GroupOf(IntPtr handle, int processId)
+    {
+        ushort count = 1;
+        var groups = new ushort[1];
+
+        if (AmbientNativeMethods.GetProcessGroupAffinity(handle, ref count, groups))
+        {
+            return groups[0];
+        }
+
+        var error = Marshal.GetLastWin32Error();
+
+        if (error == AmbientNativeMethods.ErrorInsufficientBuffer)
+        {
+            throw new InvalidOperationException(
+                $"Process {processId} has threads in {count} processor groups. GamerGod does not "
+                + "move a process whose affinity it could not restore exactly.");
+        }
+
+        throw new Win32Exception(
+            error, $"Cannot read the processor group of process {processId}.");
     }
 
     public ValueTask<ServiceInfo?> QueryServiceAsync(string name, CancellationToken cancellationToken)

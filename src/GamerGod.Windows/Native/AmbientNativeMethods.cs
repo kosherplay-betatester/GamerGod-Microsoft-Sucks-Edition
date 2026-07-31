@@ -76,6 +76,69 @@ internal static class AmbientNativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool CloseHandle(IntPtr handle);
 
+    // ---- Processor group affinity --------------------------------------
+    //
+    // Above 64 logical processors Windows splits the machine into groups, and a bare 64-bit
+    // mask stops being an address: bit 3 of group 0 and bit 3 of group 1 are different
+    // processors. Every mask GamerGod journals therefore carries the group it was read from,
+    // and every write checks that the group still matches before it lands.
+
+    /// <summary>ERROR_INSUFFICIENT_BUFFER — the process belongs to more than one group.</summary>
+    internal const int ErrorInsufficientBuffer = 122;
+
+    /// <summary>ERROR_INVALID_PARAMETER — no process with that id exists.</summary>
+    internal const int ErrorInvalidParameter = 87;
+
+    /// <summary>STILL_ACTIVE, the exit code Windows reports for a running process.</summary>
+    internal const uint StillActive = 259;
+
+    /// <summary>
+    /// Needs PROCESS_QUERY_LIMITED_INFORMATION and nothing more. Returns false with
+    /// <see cref="ErrorInsufficientBuffer"/> when the process spans several groups, which is
+    /// the case GamerGod refuses rather than guesses at.
+    /// </summary>
+    [DllImport(Kernel32, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetProcessGroupAffinity(
+        IntPtr process, ref ushort groupCount, [In, Out] ushort[] groupArray);
+
+    /// <summary>
+    /// The mask is relative to the group the process belongs to, which is why it is never
+    /// read without <see cref="GetProcessGroupAffinity"/> alongside it.
+    /// </summary>
+    [DllImport(Kernel32, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetProcessAffinityMask(
+        IntPtr process, out UIntPtr processAffinityMask, out UIntPtr systemAffinityMask);
+
+    /// <summary>
+    /// Sets affinity within the process's existing group. There is deliberately no call here
+    /// that moves a process between groups: doing so means writing every thread's group
+    /// affinity individually, and a partial failure would leave a process we could not put
+    /// back.
+    /// </summary>
+    [DllImport(Kernel32, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetProcessAffinityMask(IntPtr process, UIntPtr processAffinityMask);
+
+    // ---- Process liveness, for the watchdog ---------------------------
+    //
+    // Read-only, PROCESS_QUERY_LIMITED_INFORMATION only. Nothing here can start, stop,
+    // change or read anything inside another process.
+
+    [DllImport(Kernel32, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
+
+    /// <summary>
+    /// The creation time is what distinguishes a process from whatever later inherits its
+    /// id. FILETIME values are passed as longs, which is what they are.
+    /// </summary>
+    [DllImport(Kernel32, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetProcessTimes(
+        IntPtr process, out long creationTime, out long exitTime, out long kernelTime, out long userTime);
+
     // ---- Job objects --------------------------------------------------
 
     /// <summary>JOBOBJECT_BASIC_LIMIT_INFORMATION.LimitFlags: affinity limit.</summary>

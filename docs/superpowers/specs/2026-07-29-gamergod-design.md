@@ -228,6 +228,17 @@ autopsy over that window.
   storm, disk burst, GPU preemption, shader compile, mode-set.
 - **Output:** plain English. *"Your 340 ms hitch at 21:14 was Windows Search indexing your
   Steam library."* One click: suppress it next session.
+
+    > **NOT BUILT, and nothing in the codebase can do this.** Naming a culprit process needs
+    > ETW correlation of context switches and DPCs back to a process, which is not
+    > implemented. What ships is *pipeline-stage* attribution from PresentMon columns
+    > (`src/GamerGod.Core/Forensics/StallCause.cs`): it answers "the GPU was busy for 31 ms
+    > while the CPU waited" and cannot answer "it was WSearch".
+    >
+    > This example survived here while the README separately claimed four projects that did
+    > not exist and the protection list held a process name no machine runs. The same failure
+    > three times: a document describing an intention, read later as a description of the
+    > build. Kept as a goal, marked so it cannot be quoted as a capability.
 - **Ring dump:** on a severe hitch or crash, write the `.etl` so power users can open it
   in WPA.
 
@@ -277,7 +288,7 @@ streamer / multi-monitor path.
 | **Frametime consistency bar** | The metric that actually correlates with "feels smooth". Averages hide stutter; this doesn't |
 | **Per-domain CPU utilisation** — game domain vs ambient domain, side by side | Live proof the partition is working. Nobody has this because nobody else models domains |
 | **Which cores your game is actually running on** | Turns "I set an affinity, I think it worked" into an observable fact |
-| **Live stutter attribution** — `⚠ hitch 340 ms — WSearch` appearing in real time | **The differentiator.** Every other overlay shows you a number went bad. GamerGod tells you *what did it*, while you're still in the match |
+| **Live stutter attribution** — `⚠ hitch 340 ms — WSearch` appearing in real time *(NOT BUILT — needs ETW process correlation; shipped forensics attributes a pipeline stage, not a process)* | **The differentiator.** Every other overlay shows you a number went bad. GamerGod tells you *what did it*, while you're still in the match |
 | GamerGod status line — active profile, `AMBIENT-ONLY`, detected AC tier | You always know exactly what is and isn't being done to your game |
 | GPU util / VRAM / clocks / power / temps, CPU per-core, RAM | Standard, via vendor SDKs (NVAPI, ADLX, IGCL) |
 | Present-to-display latency, Reflex stats where exposed | Software-measured input latency without LDAT hardware |

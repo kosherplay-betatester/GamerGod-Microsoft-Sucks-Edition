@@ -390,11 +390,11 @@ public sealed class FileJournal(string path) : IJournal
 /// Source-generated serialisation for the journal.
 ///
 /// <para>
-/// Reflection-based JSON is unavailable here: the service and watchdog publish as NativeAOT
-/// so they start fast and carry no runtime dependency, and a journal that failed to
-/// deserialise after trimming would break recovery precisely when it matters most. Enum
-/// values are written as strings so a journal left behind by a crash can be read by a human
-/// with a text editor.
+/// Reflection-based JSON is unavailable here. Every shipped binary is analysed for AOT
+/// compatibility, and a journal that failed to deserialise after trimming would break
+/// recovery precisely when it matters most — which is to say only in a shipped build, and
+/// only after a crash. Enum values are written as strings so a journal left behind by one
+/// can be read by a human with a text editor.
 /// </para>
 /// </summary>
 [JsonSourceGenerationOptions(

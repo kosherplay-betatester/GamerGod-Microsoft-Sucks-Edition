@@ -10,6 +10,12 @@
     built-in Assert rather than FluentAssertions for exactly this reason.
   -->
   <ItemGroup>
+    <!--
+      MIT, and part of the same .NET release the rest of this repository targets. It is what
+      lets gmsvc.exe run as both a Windows service and an ordinary console program, which is
+      the difference between debugging boot recovery and guessing at it.
+    -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.10" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="System.Management" Version="9.0.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />

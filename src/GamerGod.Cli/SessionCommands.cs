@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using GamerGod.Core.Engine;
 using GamerGod.Core.Hardware;
 using GamerGod.Core.Ledger;
@@ -14,11 +13,9 @@ namespace GamerGod.Cli;
 /// </summary>
 internal static class SessionCommands
 {
-    private static string StateRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "GamerGod");
-
-    private static string JournalPath => Path.Combine(StateRoot, "state", "session.journal");
+    // Shared with the background service, which recovers this exact file at boot. They are
+    // separate processes that never speak to each other except through it.
+    private static string JournalPath => StateLayout.SessionJournal;
 
     public static async Task<int> OnAsync(bool dryRun)
     {
@@ -199,59 +196,5 @@ internal static class SessionCommands
     private sealed class NullResolver : IMutationResolver
     {
         public IMutation? Resolve(string mutationType, string key) => null;
-    }
-
-    /// <summary>
-    /// Rebuilds ambient mutations from a journal so a cold process — one that never applied
-    /// anything — can still undo it.
-    /// </summary>
-    private sealed class AmbientMutationResolver(IAmbientOperations os, CpuTopology topology) : IMutationResolver
-    {
-        public IMutation? Resolve(string mutationType, string key)
-        {
-            if (key.StartsWith("service:", StringComparison.Ordinal))
-            {
-                return new ServiceSuspensionMutation(os, key["service:".Length..]);
-            }
-
-            return key switch
-            {
-                "ecoqos:background" => new EfficiencyModeMutation(os, ImmutableArray<ProcessInfo>.Empty),
-                "power:scheme" => new PowerSchemeMutation(os, "GamerGod"),
-
-                // Affinity outlives the process that set it, so unlike a job object it has
-                // to be put back deliberately. The captured masks come from the journal.
-                "affinity:ambient-domain" => new AffinityConfinementMutation(
-                    os, default, ImmutableArray<ProcessInfo>.Empty, topology),
-
-                // A confinement held by a process that has since exited is already lifted by
-                // Windows, so a cold revert has nothing to do and should say so rather than
-                // reporting a failure.
-                "confine:ambient-domain" => new ReleasedConfinement(),
-                _ => null,
-            };
-        }
-    }
-
-    private sealed class ReleasedConfinement : IMutation
-    {
-        public string Key => "confine:ambient-domain";
-
-        public MutationTier Tier => MutationTier.ProcessDemotion;
-
-        public MutationVisibility Visibility => MutationVisibility.Ambient;
-
-        public bool IsBootPersistent => false;
-
-        public string Describe() => "release background confinement";
-
-        public ValueTask<System.Text.Json.JsonElement> CaptureAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult(System.Text.Json.JsonDocument.Parse("{}").RootElement);
-
-        public ValueTask ApplyAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
-
-        public ValueTask RevertAsync(
-            System.Text.Json.JsonElement capture, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
     }
 }

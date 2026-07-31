@@ -10,7 +10,7 @@
 
 [![Release](https://img.shields.io/github/v/release/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition?style=for-the-badge&color=FFB454&labelColor=0A0C11&label=download)](https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition/releases/latest)
 [![Licence](https://img.shields.io/badge/licence-GPLv3-FFB454?style=for-the-badge&labelColor=0A0C11)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-669_passing-3FBF8F?style=for-the-badge&labelColor=0A0C11)](tests)
+[![Tests](https://img.shields.io/badge/tests-816_passing-3FBF8F?style=for-the-badge&labelColor=0A0C11)](tests)
 
 [![Charter](https://img.shields.io/badge/charter-binding-FF6B5B?style=flat-square&labelColor=0A0C11)](CHARTER.md)
 [![Telemetry](https://img.shields.io/badge/telemetry-none,_ever-6FD3FF?style=flat-square&labelColor=0A0C11)](CHARTER.md)
@@ -135,11 +135,13 @@ precisely to tell those two cases apart.
 
 ```
 GamerGod.Core          pure domain - mutations, ledger, policy, catalogue, search,
-                       measurement. NO OS calls. Contains the Engine/ and Measurement/
-                       namespaces; they are folders here, not separate projects.
+                       measurement, forensics, recovery. NO OS calls. Engine/, Forensics/
+                       and Recovery/ are folders here, not separate projects.
 GamerGod.Windows       the ONLY project that P/Invokes. NativeMethods.txt is the audit surface.
 GamerGod.Ui            the WPF desktop app
 GamerGod.Cli           gamergod.exe - and the privileged broker the app calls for elevation
+GamerGod.Service       gmsvc.exe. LocalSystem: restores the machine at boot after a crash.
+                       Zero P/Invoke, like every project except GamerGod.Windows.
 ```
 
 `Core` **cannot** reference `GamerGod.Windows` — an architecture test fails the
@@ -296,7 +298,7 @@ description of what installing GamerGod changes and you can read it first.
 git clone https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition.git
 cd GamerGod-Microsoft-Sucks-Edition
 
-dotnet test                       # 669 tests: unit + chaos + architecture
+dotnet test                       # 816 tests: unit + chaos + architecture
 pwsh install\Build-Installer.ps1  # test → publish → stage → compile
 ```
 
@@ -315,7 +317,7 @@ gamergod restore    # recover after a crash
 
 # Safety
 
-**669 tests.** Unit, architecture, and chaos tests that kill the process at every possible point
+**816 tests.** Unit, architecture, and chaos tests that kill the process at every possible point
 in an apply-and-revert cycle — 500 trials at a time, against a fake OS — and assert the machine
 always ends clean.
 
