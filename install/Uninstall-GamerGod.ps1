@@ -42,6 +42,20 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# The same repair the installer makes, for the same reason and with more at stake: this script
+# runs from the uninstaller, which is also a 32-bit process launching 64-bit PowerShell, and the
+# PSModulePath it inherits can leave built-in cmdlets unloadable. A failure here does not stop an
+# install — it strands a registered LocalSystem service on a machine whose owner asked for
+# GamerGod to be gone.
+$systemModules = @(
+    (Join-Path $env:SystemRoot 'system32\WindowsPowerShell\v1.0\Modules')
+    (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules')
+) | Where-Object { Test-Path $_ }
+
+$env:PSModulePath = @(
+    @($systemModules) + @($env:PSModulePath -split ';' | Where-Object { $_ }) | Select-Object -Unique
+) -join ';'
+
 $ServiceName = 'GamerGodService'
 $InstallRoot = Join-Path $env:ProgramFiles 'GamerGod'
 $StateRoot = Join-Path $env:ProgramData 'GamerGod'
@@ -90,14 +104,38 @@ function Invoke-Restore {
     return $false
 }
 
+# The second opinion, after the restore above: is anything still recorded as applied?
+#
+# This used to answer by looking for a journal *file*, which was wrong twice over. A journal
+# exists from the first time Game Mode is ever turned on and keeps existing afterwards, so a
+# perfectly clean machine reported "journal file(s) still record outstanding changes" — and
+# then, because Get-ChildItem unrolls a single match to a bare FileInfo and
+# Set-StrictMode -Version Latest refuses .Count on one, the script threw before it reached
+# Remove-GamerGodService. One journal is the ordinary case, so the uninstaller failed for
+# essentially everyone who had ever armed Game Mode, leaving a registered LocalSystem service
+# and its executable behind while Setup reported a successful uninstall.
+#
+# The ledger already knows the answer and `gamergod status` returns it as an exit code, so ask
+# the thing that knows instead of inferring it from the filesystem.
 function Test-JournalClean {
-    $state = Join-Path $StateRoot 'state'
-    if (-not (Test-Path $state)) { return $true }
+    $cli = Join-Path $InstallRoot 'gamergod.exe'
 
-    $active = Get-ChildItem -Path $state -Filter '*.journal' -ErrorAction SilentlyContinue
-    if (-not $active) { return $true }
+    if (-not (Test-Path $cli)) {
+        # Nothing left to ask, and nothing left that could be applying anything either.
+        return $true
+    }
 
-    Warn "$($active.Count) journal file(s) still record outstanding changes"
+    $output = & $cli status 2>&1
+    $code = $LASTEXITCODE
+
+    if ($code -eq 0) { return $true }
+
+    if ($code -eq 10) {
+        Warn 'GamerGod still records changes as applied to this machine'
+        return $false
+    }
+
+    Warn "Could not read GamerGod's status (exit $code): $output"
     return $false
 }
 

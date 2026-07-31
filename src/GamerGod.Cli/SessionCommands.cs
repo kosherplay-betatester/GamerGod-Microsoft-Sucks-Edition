@@ -196,6 +196,18 @@ internal static class SessionCommands
         return report.IsClean ? 0 : 5;
     }
 
+    /// <summary>
+    /// Reports whether anything is applied. Exit code 0 when nothing is,
+    /// <see cref="GameModeIsOnExitCode"/> when something is.
+    ///
+    /// <para>
+    /// The exit code exists so a script can ask without parsing English. The uninstaller is the
+    /// caller that needs it: it must not delete GamerGod while changes are still recorded as
+    /// applied, because GamerGod is the only thing that knows how to undo them, and it used to
+    /// answer that question by looking for a journal <em>file</em> — which exists from the first
+    /// time Game Mode is ever turned on and says nothing about whether anything is still applied.
+    /// </para>
+    /// </summary>
     public static async Task<int> StatusAsync()
     {
         // Both journals, for the same reason 'off' reads both: a benchmark that was
@@ -244,8 +256,14 @@ internal static class SessionCommands
         }
 
         Console.WriteLine();
-        return 0;
+        return active ? GameModeIsOnExitCode : 0;
     }
+
+    /// <summary>
+    /// What <c>gamergod status</c> returns when changes are still applied. Distinct from the
+    /// failure codes so a script can tell "on" from "this command did not work".
+    /// </summary>
+    public const int GameModeIsOnExitCode = 10;
 
     private static ValueTask<RestoreStatus> ReadRestoreStatusAsync()
     {

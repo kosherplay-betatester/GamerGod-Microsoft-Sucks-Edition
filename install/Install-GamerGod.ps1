@@ -47,6 +47,26 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# PowerShell finds its own built-in cmdlets through PSModulePath, and this script does not
+# always inherit a usable one. The .exe installer is a 32-bit process launching 64-bit
+# PowerShell, and the PSModulePath it hands down resolves to the 32-bit module directories, so
+# Get-Acl failed with "the module could not be loaded" — while the identical command run by hand
+# from an ordinary shell worked. The state directory was created and then left with its default
+# inherited ACL, the script aborted before registering the service, and the only symptom was an
+# exit code.
+#
+# The canonical system paths are put back in front rather than replacing the variable, so a
+# machine with legitimate extra module directories keeps them.
+$systemModules = @(
+    (Join-Path $env:SystemRoot 'system32\WindowsPowerShell\v1.0\Modules')
+    (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules')
+) | Where-Object { Test-Path $_ }
+
+# -join, not Join-String: this runs under Windows PowerShell 5.1, where Join-String does not exist.
+$env:PSModulePath = @(
+    @($systemModules) + @($env:PSModulePath -split ';' | Where-Object { $_ }) | Select-Object -Unique
+) -join ';'
+
 $ServiceName = 'GamerGodService'
 $StateRoot = Join-Path $env:ProgramData 'GamerGod'
 
@@ -151,11 +171,32 @@ function Install-Binaries {
 
     Write-Step "Installing binaries to $InstallRoot"
 
-    if ($PSCmdlet.ShouldProcess($InstallRoot, 'Copy program files')) {
-        New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-        Copy-Item -Path (Join-Path $Source '*') -Destination $InstallRoot -Recurse -Force
-        Write-Ok "Copied from $Source"
+    if (-not $PSCmdlet.ShouldProcess($InstallRoot, 'Copy program files')) { return }
+
+    New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+
+    # The .exe installer has already put the payload here and then calls this script with the
+    # same path for both, so there is nothing to copy and every file is its own source.
+    #
+    # Copy-Item calls that "cannot overwrite the item with itself" and throws, which took the
+    # whole script down before it reached the part that registers the service — the background
+    # service being Charter Article X's third escape path, and the only one that survives the
+    # machine losing power. Setup still reported success, because Inno does not check the exit
+    # code of a [Run] entry. So the installer's own headline promise, "registers a background
+    # service that restores your machine after a crash", silently did not happen.
+    #
+    # Compared as resolved paths, because "C:\Program Files\GamerGod" and the same path with a
+    # trailing separator or different casing are the same directory and any of them can arrive.
+    $resolvedSource = (Resolve-Path $Source).Path.TrimEnd('\')
+    $resolvedTarget = (Resolve-Path $InstallRoot).Path.TrimEnd('\')
+
+    if ($resolvedSource -eq $resolvedTarget) {
+        Write-Ok "Already in place at $InstallRoot"
+        return
     }
+
+    Copy-Item -Path (Join-Path $Source '*') -Destination $InstallRoot -Recurse -Force
+    Write-Ok "Copied from $Source"
 }
 
 function Initialize-StateDirectory {
