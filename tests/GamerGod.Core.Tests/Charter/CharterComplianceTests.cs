@@ -366,6 +366,44 @@ public sealed class CharterComplianceTests
             p => Assert.False(p.Verified, $"{p.Name} ships marked as verified without evidence."));
     }
 
+    [Fact]
+    public void The_readout_is_not_advertised_as_showing_numbers_it_does_not_have()
+    {
+        // The settings screen said the readout showed "frames per second, your 1% low, and how
+        // many hitches this session". It showed three em-dashes: MainWindow builds every
+        // ReadoutSnapshot with those fields null, because nothing captures frames outside a
+        // benchmark. Article VII broken where a user can see both halves at once — the promise
+        // on the settings screen, the contradiction on their second monitor.
+        //
+        // Pinned from both ends. If somebody wires the numbers up, the snapshot stops being
+        // hard-coded and this test says so, which is the moment the copy may promise them again.
+        var window = Path.Combine(Repo.Root, "src", "GamerGod.Ui", "MainWindow.xaml.cs");
+        var source = File.ReadAllText(window);
+
+        var unfed = source.Contains("Fps: null", StringComparison.Ordinal)
+            && source.Contains("OnePercentLowFps: null", StringComparison.Ordinal)
+            && source.Contains("Hitches: null", StringComparison.Ordinal);
+
+        if (!unfed)
+        {
+            return;
+        }
+
+        foreach (var file in (string[])["src/GamerGod.Ui/MainWindow.xaml", "README.md"])
+        {
+            var text = File.ReadAllText(Path.Combine(Repo.Root, file));
+
+            // The promise these made, in the words they made it in. Both now say the fields read
+            // as dashes, and both say why.
+            Assert.False(
+                text.Contains("readout in the corner: frames per second", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("armed state, frames per second, 1% low, hitch count", StringComparison.OrdinalIgnoreCase),
+                $"{file} advertises readout numbers that nothing feeds.");
+
+            Assert.Contains("dashes", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private sealed class StubMutation(bool bootPersistent) : IMutation
     {
         public string Key => "stub";

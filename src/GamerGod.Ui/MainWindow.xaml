@@ -727,9 +727,18 @@
                             </Border>
 
                             <!--
-                                Overlay. The only toggle in GamerGod whose measured delta is a
-                                cost rather than a benefit, and it carries the same UNMEASURED
-                                badge as everything else until a session has measured it here.
+                                Overlay. Deliberately the smallest section on this screen.
+
+                                It shows whether GamerGod is armed and nothing else: the three
+                                frame numbers it has room for need a capture running, and the
+                                desktop app does not start one. This said "frames per second,
+                                your 1% low, and how many hitches this session" while the readout
+                                drew three em-dashes, which is Article VII broken in the one place
+                                a user can see it — the promise is on the settings screen and the
+                                contradiction is on their second monitor.
+
+                                The copy now says what it does. RivaTuner is the answer for the
+                                rest, and that is Article IX rather than an apology.
                             -->
                             <Border Style="{StaticResource Card}" Margin="0,14,0,0">
                                 <StackPanel>
@@ -738,15 +747,15 @@
                                     <Grid Margin="0,4,0,0">
                                         <StackPanel Margin="0,0,70,0">
                                             <TextBlock Style="{StaticResource H2}" FontSize="13.5"
-                                                       Text="Show frame rate over your game" />
+                                                       Text="Show a GamerGod badge over your game" />
                                             <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
-                                                       Text="A small readout in the corner: frames per second, your 1% low, and how many hitches this session." />
+                                                       Text="A small readout in the corner showing whether GamerGod is on. Ctrl+Shift+O hides and shows it." />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Margin="0,7,0,0"
+                                                       Text="It has room for frames per second, your 1% low and a hitch count, and it draws all three as dashes, because nothing is measuring them. GamerGod only captures frames during a benchmark, and this app does not start one. Until that changes the numbers stay dashes — shown rather than hidden, so the readout cannot imply it knows something it does not." />
                                             <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
                                                        Margin="0,7,0,0"
                                                        Text="It appears in games set to Borderless or Windowed, and not in games set to Fullscreen, because GamerGod draws it in a window of its own instead of drawing inside your game — and Windows will not put any window above a Fullscreen game." />
-                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
-                                                       Margin="0,7,0,0"
-                                                       Text="On some games the readout costs about a frame of delay by itself. GamerGod measures that on your machine and tells you when it happens." />
                                             <TextBlock x:Name="OverlayMeasured" Style="{StaticResource Mono}"
                                                        FontSize="10.5" Margin="0,9,0,0"
                                                        Text="UNMEASURED · nothing has measured what this costs on your machine" />

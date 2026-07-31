@@ -131,6 +131,37 @@ re-applying a captured value would hit a **recycled process id**. A registry val
 with a reboot, so it still gets restored. The journal records which boot each session began in,
 precisely to tell those two cases apart.
 
+### Three things that are easy to get wrong here, and how each is handled
+
+**A process id is not an identity.** Revert can run an hour after capture, from a process that
+never applied anything — after a crash, from the watchdog, from `gamergod off` in a new shell.
+Windows recycles ids hard in that gap. So the journal records each process's *name* beside its
+id, and a revert writes only where the name still matches. The case this exists to rule out is
+the game inheriting a background app's old id: pinning a game's threads would be a Contact change
+to a title that may be running kernel anti-cheat, reached through the one code path whose whole
+job is to leave the machine alone.
+
+**The clock is not a fixed point.** "Which boot was this?" used to be answered from
+`UtcNow - uptime`, which moves when the wall clock is corrected — an NTP step, a wrong RTC, or a
+dual boot where Linux writes local time to the RTC. A clock that jumps forward made a *live*
+session look like it belonged to a previous boot, so its captures were dropped as already-undone
+and the machine stayed partitioned with nothing left that knew how to restore it. The uptime
+counter does not move when the clock does, so it is recorded too and the question is answered
+from it. Where the evidence is ambiguous the answer is "not restarted", because that direction
+fails safely and the other one is unrecoverable.
+
+**Deciding and acting have to be one step.** The boot pass reads the journal, asks Windows which
+owners are still alive, then reverts the orphans. Probing is the slow part, and a session armed
+*during* it used to be missing from the "leave this alone" list and present in the journal by the
+time the revert read it — so the service ended a session whose user was watching. All three steps
+now happen under one hold of the journal. An apply that arrives mid-pass waits, and then lands.
+
+The journal is append-only, with one exception: once it passes 2000 lines, a clean revert drops
+the lines describing sessions that are finished with. What survives is decided by the same
+function that decides what to revert, so the two cannot drift apart. It is written beside the
+journal and moved over it in one step — truncating in place would leave a window where the
+machine is changed and the file saying so is empty.
+
 ## What the app is made of
 
 ```
@@ -399,10 +430,16 @@ no controller combo. The readout is deliberately minimal; see below.
 
 ### The readout, and why RivaTuner is the better answer
 
-GamerGod draws a small readout — armed state, frames per second, 1% low, hitch count — in a
-window of its own. It works in Borderless and Windowed games and **not in Fullscreen ones**,
-because Windows will not put any window above a Fullscreen game and GamerGod will not do what
-every other overlay does to get around that.
+GamerGod draws a small readout in a window of its own, showing **whether GamerGod is on**.
+Ctrl+Shift+O hides and shows it. It works in Borderless and Windowed games and **not in
+Fullscreen ones**, because Windows will not put any window above a Fullscreen game and GamerGod
+will not do what every other overlay does to get around that.
+
+It has room for frames per second, a 1% low and a hitch count, and **it draws all three as
+dashes.** Frames are only captured during a benchmark, the desktop app does not start one, and
+nothing feeds those three fields. They are shown as dashes rather than hidden so the readout
+cannot imply it knows a number it does not. This paragraph used to list them as things the
+readout displays; it did not display them then either.
 
 **If you want GPU and CPU temperatures, clocks, voltages, or an overlay that survives Fullscreen,
 install RivaTuner and MSI Afterburner.** They are one click away in Get more, they are on
