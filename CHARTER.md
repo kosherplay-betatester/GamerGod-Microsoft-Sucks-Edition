@@ -114,15 +114,25 @@ Four independent escape paths, always: a keyboard hotkey, a controller combo, a
 service-side watchdog, and reboot. The fourth must work even if the first three are
 broken, because it is guaranteed by Article VI rather than by any running code.
 
-> **Built today: two and a half.** The switch in the app and `gamergod off` both work, and
-> reboot works — the service restores the machine before anyone signs in. The crash watchdog
-> is written and tested but **nothing arms it**, because the channel a session uses to hand
-> over its owner is not built. There is no panic hotkey and no controller combo; the only
-> hotkey in the product toggles the frame readout.
+> **Built today: three of the four.** The switch in the app and `gamergod off` both work.
+> Reboot works — the service restores the machine before anyone signs in. And the **crash
+> watchdog is armed**: the background service checks every five seconds whether the program that
+> owns a session is still running, and puts the machine back when it is not. Measured on the
+> reference machine at 2.1 seconds from killing the owner to a fully restored desktop, with
+> nothing else running and nobody typing a command.
+>
+> It needs no channel from the session. The journal has recorded who owns each session since
+> ownership existed — durably, before the first change is applied — so the fact a pipe would have
+> carried is already on disk, in a file only administrators can write. That matters beyond
+> tidiness: a process being killed does not get to send a message, and this is the escape path
+> for exactly that case.
+>
+> **Missing: the panic hotkey and the controller combo.** The only hotkey in the product toggles
+> the frame readout.
 >
 > This note exists because the article was being read as a description of the build rather
 > than a commitment about it, and a promise of four escape paths is worth less than an honest
-> count of the ones that exist. The commitment stands. The count is two and a half.
+> count of the ones that exist. The commitment stands. The count is three.
 
 ---
 

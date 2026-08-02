@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
@@ -298,7 +299,7 @@ public partial class MainWindow : Window
         await ApplyAsync(wantOn);
     }
 
-    private async Task ApplyAsync(bool turnOn)
+    private async Task ApplyAsync(bool turnOn, string? ownerExecutable = null)
     {
         MasterSwitch.IsEnabled = false;
 
@@ -306,7 +307,7 @@ public partial class MainWindow : Window
         {
             if (turnOn)
             {
-                await TurnOnAsync();
+                await TurnOnAsync(ownerExecutable);
             }
             else
             {
@@ -373,7 +374,13 @@ public partial class MainWindow : Window
     /// Returns true when the caller should stop, because the work was brokered and reported.
     /// </para>
     /// </summary>
-    private async Task<bool> BrokerAsync(bool turnOn)
+    /// <param name="ownerExecutable">
+    /// The game about to be launched, when this arm is part of launching one. The elevated
+    /// command waits for that program to appear and hands it the session, so the machine comes
+    /// back when the game exits or crashes rather than at the next restart. Null for the switch
+    /// on the dashboard, which arms a session meant to outlive everything.
+    /// </param>
+    private async Task<bool> BrokerAsync(bool turnOn, string? ownerExecutable = null)
     {
         if (Elevation.IsElevated)
         {
@@ -436,7 +443,12 @@ public partial class MainWindow : Window
         // suppression stopped nothing.
         var result = turnOn
             ? await Elevation.RunAsync(
-                verb, default, LeverArguments.Render(OptionsFromSettings(dryRun: false)))
+                verb,
+                default,
+                [
+                    .. LeverArguments.Render(OptionsFromSettings(dryRun: false)),
+                    .. OwnerArguments.RenderExecutable(ownerExecutable),
+                ])
             : await Elevation.RunAsync(verb, default);
 
         switch (result.Outcome)
@@ -489,7 +501,7 @@ public partial class MainWindow : Window
         return true;
     }
 
-    private async Task TurnOnAsync()
+    private async Task TurnOnAsync(string? ownerExecutable = null)
     {
         if (_topology is null)
         {
@@ -498,7 +510,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (await BrokerAsync(turnOn: true))
+        if (await BrokerAsync(turnOn: true, ownerExecutable))
         {
             return;
         }
@@ -784,6 +796,51 @@ public partial class MainWindow : Window
         ClearSelection();
     }
 
+    /// <summary>
+    /// The executable that, once running, owns the session launching this game creates — or null
+    /// when this machine does not say clearly enough.
+    ///
+    /// <para>
+    /// Returning null is the safe answer and a common one. It costs the watchdog for that
+    /// session, which then behaves exactly as every session did before: ended by the switch, by
+    /// <c>gamergod off</c>, or by a restart. Naming the <em>wrong</em> program would be worse
+    /// than naming none — the machine would come back the moment some unrelated thing closed,
+    /// mid-game.
+    /// </para>
+    ///
+    /// <para>
+    /// <see cref="ExecutablePicker"/> is the same chooser the catalogue uses, and its negative
+    /// rule is what makes this safe: it refuses uninstallers outright and returns nothing rather
+    /// than a guess when several candidates are equally plausible.
+    /// </para>
+    /// </summary>
+    private static string? OwnerExecutableFor(GameEntry game)
+    {
+        var folder = game.InstallPath;
+
+        if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
+        {
+            return null;
+        }
+
+        try
+        {
+            var executables = Directory
+                .EnumerateFiles(folder, "*.exe", SearchOption.TopDirectoryOnly)
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .ToImmutableArray();
+
+            return ExecutablePicker.Choose(
+                game.Name, new DirectoryInfo(folder).Name, executables);
+        }
+        catch (Exception)
+        {
+            // An unreadable install folder is not a reason to refuse to launch a game.
+            return null;
+        }
+    }
+
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {
         if (_selected is not { } tile)
@@ -798,10 +855,16 @@ public partial class MainWindow : Window
         {
             // Arm first, then launch. The other order would start the game onto a machine that
             // is still busy, which is the moment the confinement is most worth having.
+            //
+            // The game is named as the session's future owner, so the background service can put
+            // the machine back when the game exits — including when it crashes, which is the case
+            // nothing else covers: a process being killed does not get to ask for anything to be
+            // undone. Its process id cannot be passed instead, because a store title is started
+            // by its own launcher and nothing here ever sees it.
             if (MasterSwitch.IsChecked != true)
             {
                 MasterSwitch.IsChecked = true;
-                await ApplyAsync(turnOn: true);
+                await ApplyAsync(turnOn: true, OwnerExecutableFor(game));
             }
 
             var armed = MasterSwitch.IsChecked == true;

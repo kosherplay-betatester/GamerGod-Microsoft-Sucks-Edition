@@ -1,9 +1,11 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using GamerGod.Core.Engine;
 using GamerGod.Core.Hardware;
 using GamerGod.Core.Ledger;
 using GamerGod.Core.Mutations;
 using GamerGod.Core.Policy;
+using GamerGod.Core.Recovery;
 using GamerGod.Core.Safety;
 using GamerGod.Windows;
 
@@ -32,7 +34,37 @@ internal static class SessionCommands
     /// immediately before ignoring them.
     /// </para>
     /// </summary>
-    public static async Task<int> OnAsync(bool dryRun, AmbientOptions? options = null)
+    /// <summary>
+    /// Arms a session.
+    /// </summary>
+    /// <param name="owner">
+    /// The process whose death ends this session, or null for a session that outlives whoever
+    /// armed it.
+    ///
+    /// <para>
+    /// Null is the ordinary case and not a degraded one: <c>gamergod on</c> typed into a shell
+    /// applies and exits, and the changes are meant to outlive it — that is the whole reason
+    /// they are journalled rather than held in a process. Such a session is ended by
+    /// <c>gamergod off</c> or by a restart.
+    /// </para>
+    ///
+    /// <para>
+    /// An owner is what makes the watchdog able to do anything. Passing the game's identity
+    /// means the machine comes back when the game does — including when it crashes, which is the
+    /// case where nothing else can help, because a process being killed does not get to ask for
+    /// anything to be undone.
+    /// </para>
+    /// </param>
+    /// <param name="ownerExecutable">
+    /// A program to wait for after arming and then hand the session to — the game the app just
+    /// asked a store launcher to start, whose process id nobody can know in advance. Null to arm
+    /// and return, which is what a shell invocation does.
+    /// </param>
+    public static async Task<int> OnAsync(
+        bool dryRun,
+        AmbientOptions? options = null,
+        ProcessIdentity? owner = null,
+        string? ownerExecutable = null)
     {
         var operations = new WindowsAmbientOperations();
         var topology = new WindowsTopologyProvider().Classify();
@@ -61,7 +93,8 @@ internal static class SessionCommands
             topology,
             permit,
             effective,
-            await ReadRestoreStatusAsync());
+            await ReadRestoreStatusAsync(),
+            owner: owner);
 
         Console.WriteLine();
         Accent(dryRun ? "  Dry run - nothing was changed" : "  Game Mode on", ConsoleColor.Green);
@@ -94,8 +127,141 @@ internal static class SessionCommands
         Console.WriteLine("  Run 'gamergod off' when you're done. Rebooting also undoes everything.");
         Console.WriteLine();
 
+        if (ownerExecutable is { Length: > 0 } && !dryRun && !receipt.Applied.IsEmpty)
+        {
+            SpawnHandover(receipt.SessionId, ownerExecutable);
+        }
+
         return 0;
     }
+
+    /// <summary>
+    /// Starts a detached copy of this program to wait for the game and hand it the session.
+    ///
+    /// <para>
+    /// Detached, because the waiting takes minutes and the caller is the desktop app, which is
+    /// blocked on this process exiting. Doing it inline would freeze the window for as long as a
+    /// store launcher takes to cold-start — the app would look hung at exactly the moment the
+    /// user is watching to see whether Game Mode came on.
+    /// </para>
+    ///
+    /// <para>
+    /// A child of an elevated process is elevated, so the journal stays writable without a second
+    /// permission prompt. That is the whole reason the handover is spawned from here rather than
+    /// brokered separately by the app.
+    /// </para>
+    ///
+    /// <para>
+    /// Failure to spawn is deliberately silent. The session is already armed and already
+    /// journalled; losing the handover costs the watchdog, not the machine, and an error about it
+    /// on the way out of a successful arm would read as though the arm had failed.
+    /// </para>
+    /// </summary>
+    private static void SpawnHandover(string sessionId, string executable)
+    {
+        if (Environment.ProcessPath is not { Length: > 0 } self)
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(self)
+            {
+                ArgumentList = { "claim", "--session", sessionId, OwnerArguments.ExecutableFlag, executable },
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch (Exception)
+        {
+            // See above: an unowned session is the ordinary kind.
+        }
+    }
+
+    /// <summary>
+    /// Waits for a named program to start, then hands it the session — so the machine comes back
+    /// when that program does, without waiting for a restart.
+    ///
+    /// <para>
+    /// This runs after arming rather than before it because the identity does not exist yet. A
+    /// game started through a <c>steam://</c> URI is launched by its own launcher minutes later,
+    /// and the machine has to be quiet before it starts.
+    /// </para>
+    ///
+    /// <para>
+    /// Giving up is not a failure. The session is already armed and already journalled, and an
+    /// unowned session is the ordinary kind — ended by <c>gamergod off</c> or a restart, exactly
+    /// as it was before this existed. Nothing here may undo, block, or complicate that.
+    /// </para>
+    /// </summary>
+    public static async Task<int> ClaimAsync(string sessionId, string executable)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(executable);
+
+        var operations = new WindowsAmbientOperations();
+        var topology = new WindowsTopologyProvider().Classify();
+        var ledger = new MutationLedger(
+            new FileJournal(JournalPath), new AmbientMutationResolver(operations, topology));
+
+        var wanted = Path.GetFileNameWithoutExtension(executable);
+        var liveness = new WindowsProcessLiveness();
+        var deadline = DateTimeOffset.UtcNow + OwnerHandoverWindow;
+
+        Console.WriteLine($"  Waiting for {wanted} to start, so Game Mode can end when it does.");
+        Console.WriteLine();
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            foreach (var process in Process.GetProcessesByName(wanted))
+            {
+                using (process)
+                {
+                    // Through the same liveness probe the watchdog checks with, so the identity
+                    // written here and the identity compared against it are produced by one
+                    // piece of code and cannot disagree about what a process is.
+                    if (await liveness.IdentifyAsync(process.Id, default) is not { } owner)
+                    {
+                        continue;
+                    }
+
+                    if (await ledger.ClaimOwnershipAsync(sessionId, owner, default))
+                    {
+                        Accent($"  {wanted} is running. Game Mode will end when it does.",
+                            ConsoleColor.Green);
+                        Console.WriteLine();
+                        return 0;
+                    }
+
+                    // The session ended while we waited — somebody ran 'gamergod off'. There is
+                    // nothing left to own, and that is not an error.
+                    return 0;
+                }
+            }
+
+            await Task.Delay(OwnerPollInterval);
+        }
+
+        Console.WriteLine(
+            $"  {wanted} did not start within {OwnerHandoverWindow.TotalMinutes:0} minutes, so "
+            + "Game Mode stays on until you turn it off.");
+        Console.WriteLine();
+        return 0;
+    }
+
+    /// <summary>
+    /// How long to wait for a game to appear before giving up on owning it.
+    ///
+    /// <para>
+    /// Generous, because the thing being waited for is a store launcher cold-starting, verifying
+    /// files and showing its own dialogs. Costing nothing but a hidden process that polls twice a
+    /// second, and giving up cleanly, is worth more than a tight window that misses.
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan OwnerHandoverWindow = TimeSpan.FromMinutes(5);
+
+    private static readonly TimeSpan OwnerPollInterval = TimeSpan.FromMilliseconds(500);
 
     /// <summary>
     /// Puts everything back — everything GamerGod applied, not everything one file recorded.

@@ -48,9 +48,53 @@ try
         }
 
         case "on":
+        {
+            // --owner <pid>: the process whose death ends this session. Resolved to a full
+            // identity here — pid plus start time — because Windows recycles pids and a bare
+            // number would let an unrelated program inherit ownership of somebody's session.
+            //
+            // Resolved through the same WindowsProcessLiveness the watchdog probes with, so the
+            // identity written to the journal and the identity checked against it are produced
+            // by one piece of code and cannot disagree about what a process is.
+            GamerGod.Core.Recovery.ProcessIdentity? owner = null;
+
+            if (OwnerArguments.Find(args) is { } requested)
+            {
+                owner = await new WindowsProcessLiveness().IdentifyAsync(requested, default);
+
+                if (owner is null)
+                {
+                    Console.Error.WriteLine(
+                        $"  There is no process {requested} to hand this session to. "
+                        + "Nothing was changed.");
+                    return 2;
+                }
+            }
+
             return await SessionCommands.OnAsync(
                 dryRun: args.Contains("--dry-run", StringComparer.OrdinalIgnoreCase),
-                options: LeverArguments.Parse(args));
+                options: LeverArguments.Parse(args),
+                owner: owner,
+                ownerExecutable: OwnerArguments.FindExecutable(args));
+        }
+
+        case "claim":
+        {
+            // Spawned by 'gamergod on --owner-exe', not typed. It waits for a game to start and
+            // then records it as the session's owner, so the watchdog can end the session when
+            // the game does.
+            var session = ValueAfter(args, "--session");
+            var executable = OwnerArguments.FindExecutable(args);
+
+            if (session is null || executable is null)
+            {
+                Console.Error.WriteLine(
+                    "  Usage: gamergod claim --session <id> --owner-exe <program>");
+                return 2;
+            }
+
+            return await SessionCommands.ClaimAsync(session, executable);
+        }
 
         case "off":
             return await SessionCommands.OffAsync();
@@ -114,6 +158,20 @@ catch (Exception ex)
     return 1;
 }
 
+/// <summary>The value following a flag, or null when the flag is absent or ends the list.</summary>
+static string? ValueAfter(string[] arguments, string flag)
+{
+    for (var i = 0; i < arguments.Length - 1; i++)
+    {
+        if (string.Equals(arguments[i], flag, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.IsNullOrWhiteSpace(arguments[i + 1]) ? null : arguments[i + 1];
+        }
+    }
+
+    return null;
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("""
@@ -139,6 +197,11 @@ static void PrintUsage()
 
         OPTIONS
           --dry-run    With 'on': show exactly what would change, and change nothing
+          --owner N    With 'on': end this session when process N exits. Without it the
+                       session outlives whoever armed it, which is the usual behaviour.
+          --owner-exe P  With 'on': wait for program P to start, then end the session when
+                       it exits. For a game a store launcher starts, whose id nobody
+                       can know in advance.
 
           With 'on', each lever can be stated either way. Anything not given keeps
           its default, so 'gamergod on' alone behaves exactly as it always has:

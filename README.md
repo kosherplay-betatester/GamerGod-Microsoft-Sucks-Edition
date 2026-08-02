@@ -10,7 +10,7 @@
 
 [![Release](https://img.shields.io/github/v/release/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition?style=for-the-badge&color=FFB454&labelColor=0A0C11&label=download)](https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition/releases/latest)
 [![Licence](https://img.shields.io/badge/licence-GPLv3-FFB454?style=for-the-badge&labelColor=0A0C11)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-860_passing-3FBF8F?style=for-the-badge&labelColor=0A0C11)](tests)
+[![Tests](https://img.shields.io/badge/tests-948_passing-3FBF8F?style=for-the-badge&labelColor=0A0C11)](tests)
 
 [![Charter](https://img.shields.io/badge/charter-binding-FF6B5B?style=flat-square&labelColor=0A0C11)](CHARTER.md)
 [![Telemetry](https://img.shields.io/badge/telemetry-none,_ever-6FD3FF?style=flat-square&labelColor=0A0C11)](CHARTER.md)
@@ -410,10 +410,17 @@ can be closed while a session stays armed — that is deliberate, so the app is 
 have to keep running — but it means closing it is not an escape path. Use the switch or
 `gamergod off`.
 
-The Charter names four paths including a hotkey, a controller combo and a crash watchdog. Those
-are the commitment; today the watchdog exists but nothing arms it, and there is no panic hotkey
-or controller combo. Three of the four are not built, and the Charter says so where it names
-them.
+**The crash watchdog.** The background service checks every five seconds whether the program that
+owns a session is still running, and restores the machine when it is not — measured at **2.1
+seconds** from killing the owner to a fully restored desktop, with nobody typing anything. This is
+the path that covers the case none of the others can: a process being killed does not get to ask
+for its changes to be undone.
+
+It works because the journal already records who owns each session, durably, before the first
+change is applied. No pipe, no protocol, no listening socket on a LocalSystem service.
+
+The Charter names four paths. Three are built; there is no panic hotkey and no controller combo,
+and the Charter says so where it names them.
 
 ---
 
@@ -421,12 +428,12 @@ them.
 
 **Shipping** — domain partitioning · efficiency-mode demotion · service suspension · power-scheme
 management · the full ledger and journal · crash recovery · **a background service that restores
-the machine at boot** · **stutter attribution** · **autotune** · the desktop app · game
+the machine at boot** · **a crash watchdog that restores it the moment a game dies** · **stutter
+attribution** · **autotune** · the desktop app · game
 library · software catalogue · free-games browser · typo-tolerant search · opt-in release check.
 
-**Not built** — the crash watchdog is written and tested but nothing arms it, so a crash is
-recovered at the next boot rather than at the moment it happens. There is no panic hotkey and
-no controller combo. The readout is deliberately minimal; see below.
+**Not built** — there is no panic hotkey and no controller combo. The readout is deliberately
+minimal; see below.
 
 ### The readout, and why RivaTuner is the better answer
 

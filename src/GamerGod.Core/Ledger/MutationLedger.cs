@@ -608,6 +608,94 @@ public sealed class MutationLedger(IJournal journal, IMutationResolver resolver)
     }
 
     /// <summary>
+    /// Names the process whose death ends an already-armed session.
+    ///
+    /// <para>
+    /// Arming and knowing who owns the session are separated by real time, and not by an
+    /// oversight. A game launched through a <c>steam://</c> or <c>com.epicgames.launcher://</c>
+    /// URI is started by its own launcher, so nothing GamerGod calls ever returns its process id
+    /// — and the machine has to be quiet <em>before</em> the game starts, which is the whole
+    /// point of arming first. The identity only exists once the game does.
+    /// </para>
+    ///
+    /// <para>
+    /// This is an append, not an edit. Ownership is read from the last
+    /// <see cref="JournalOp.SessionBegin"/> a session has, so a second one supersedes the first
+    /// by the rule that was already there — nothing about how an owner is interpreted changes,
+    /// and a journal written by an older build still reads exactly as it did. Append-only stays
+    /// append-only, which matters more here than anywhere: this file is the only thing standing
+    /// between a crash and an unrecoverable machine.
+    /// </para>
+    ///
+    /// <para>
+    /// Claiming a session that is not outstanding does nothing and says so. Reviving a finished
+    /// session by naming it would hand the watchdog a session with no changes left to undo, and
+    /// the next thing it did would be to revert somebody else's.
+    /// </para>
+    /// </summary>
+    /// <returns>True when the session was found and is now owned.</returns>
+    public async ValueTask<bool> ClaimOwnershipAsync(
+        string sessionId, ProcessIdentity owner, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+
+        await using var scope = await _journal
+            .AcquireExclusiveAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var entries = await _journal.ReadAllAsync(cancellationToken).ConfigureAwait(false);
+
+        var live = OutstandingKeys(entries, RestartedSessions(entries))
+            .Values
+            .SelectMany(k => k.Sessions)
+            .Contains(sessionId, StringComparer.Ordinal);
+
+        if (!live)
+        {
+            return false;
+        }
+
+        await _journal.AppendAsync(
+            new JournalEntry
+            {
+                Op = JournalOp.SessionBegin,
+                SessionId = sessionId,
+                Description = "ownership handed to a running program",
+                MachineBootedAtUtcTicks = MachineBoot.At().UtcTicks,
+                MachineUptimeMs = MachineBoot.UptimeMs(),
+                OwnerProcessId = owner.ProcessId,
+                OwnerStartedAtUtcTicks = owner.StartedAtUtcTicks,
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    /// <summary>
+    /// The sessions this journal still shows as applied, newest last. Used by callers that need
+    /// to name a session without already knowing its id — a claim arriving from a separate
+    /// process that only knows a machine was armed.
+    /// </summary>
+    public async ValueTask<ImmutableArray<string>> OutstandingSessionIdsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var entries = await _journal.ReadAllAsync(cancellationToken).ConfigureAwait(false);
+        var live = OutstandingKeys(entries, RestartedSessions(entries))
+            .Values
+            .SelectMany(k => k.Sessions)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // In the order the journal began them, so "the session that was just armed" is the last.
+        return
+        [
+            .. entries
+                .Where(e => e.Op == JournalOp.SessionBegin && live.Contains(e.SessionId))
+                .Select(e => e.SessionId)
+                .Distinct(StringComparer.Ordinal),
+        ];
+    }
+
+    /// <summary>
     /// True when the journal describes changes that are still applied — the dirty flag a
     /// service checks at boot.
     /// </summary>
