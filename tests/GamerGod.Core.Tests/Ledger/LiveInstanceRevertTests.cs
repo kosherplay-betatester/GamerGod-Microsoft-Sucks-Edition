@@ -130,6 +130,80 @@ public sealed class LiveInstanceRevertTests
     }
 
     [Fact]
+    public async Task A_newer_instance_that_will_not_close_does_not_strand_the_older_one()
+    {
+        // The test above covers two instances that both come back. This is the one where the
+        // newer refuses, and it is the case that was broken: the revert loop used to break on
+        // the first exception, and LiveInstances returns newest first, so a permanently failing
+        // instance sat at the head of the list and every older one behind it was never attempted
+        // at all. Forget only runs on success, so the next pass rebuilt the same order and
+        // stopped in the same place — the older job object stayed open for the life of the
+        // process, holding its affinity limit, while the report said only that the key could not
+        // be put back.
+        //
+        // It contradicted the ledger's own rule that one stubborn resource must never strand
+        // everything after it. The rule was applied between keys and not within one.
+        var machine = new FakeMachine();
+        machine["service:WSearch"] = "Running";
+
+        var journal = new InMemoryJournal();
+        var resolver = new FakeResolver(machine);
+        var ledger = new MutationLedger(journal, resolver);
+
+        var older = new FakeMutation(machine, "service:WSearch", MutationTier.Service, "Stopped");
+        var newer = new FakeMutation(machine, "service:WSearch", MutationTier.Service, "Stopped")
+        {
+            FailOnRevert = true,
+        };
+
+        resolver.Remember(older);
+
+        await ledger.ApplyAsync("first", [older], Permit());
+        await ledger.ApplyAsync("second", [newer], Permit());
+
+        var report = await ledger.RevertAsync();
+
+        // The failure is still reported. That part always worked.
+        Assert.Equal(1, newer.RevertCount);
+        Assert.Contains("service:WSearch", report.Failed.Select(f => f.Key));
+
+        // And the older instance was reached anyway, which is the part that did not. Its
+        // resource is the one that outlives the process holding it.
+        Assert.Equal(1, older.RevertCount);
+    }
+
+    [Fact]
+    public async Task Retrying_after_a_partial_failure_reaches_both_instances_again()
+    {
+        // A failed revert leaves the entry in the journal so the next pass tries again, and the
+        // next pass must not stop at the same instance either.
+        var machine = new FakeMachine();
+        machine["service:WSearch"] = "Running";
+
+        var journal = new InMemoryJournal();
+        var resolver = new FakeResolver(machine);
+        var ledger = new MutationLedger(journal, resolver);
+
+        var older = new FakeMutation(machine, "service:WSearch", MutationTier.Service, "Stopped");
+        var newer = new FakeMutation(machine, "service:WSearch", MutationTier.Service, "Stopped")
+        {
+            FailOnRevert = true,
+        };
+
+        resolver.Remember(older);
+
+        await ledger.ApplyAsync("first", [older], Permit());
+        await ledger.ApplyAsync("second", [newer], Permit());
+
+        await ledger.RevertAsync();
+        var second = await ledger.RevertAsync();
+
+        Assert.Contains("service:WSearch", second.Failed.Select(f => f.Key));
+        Assert.Equal(2, newer.RevertCount);
+        Assert.Equal(2, older.RevertCount);
+    }
+
+    [Fact]
     public async Task The_live_instance_is_used_in_preference_to_a_rebuilt_one()
     {
         var machine = new FakeMachine();

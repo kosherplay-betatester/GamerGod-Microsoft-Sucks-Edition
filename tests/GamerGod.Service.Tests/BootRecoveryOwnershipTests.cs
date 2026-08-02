@@ -21,19 +21,28 @@ namespace GamerGod.Service.Tests;
 /// </summary>
 public sealed class BootRecoveryOwnershipTests
 {
+    private static Task<string> JournalForAsync(
+        string directory, int ownerProcessId, long ownerStartedAtUtcTicks) =>
+        JournalForAsync(directory, "session.journal", "armed", ownerProcessId, ownerStartedAtUtcTicks);
+
     private static async Task<string> JournalForAsync(
-        string directory, int ownerProcessId, long ownerStartedAtUtcTicks)
+        string directory,
+        string fileName,
+        string sessionId,
+        int ownerProcessId,
+        long ownerStartedAtUtcTicks)
     {
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, "session.journal");
+        var path = Path.Combine(directory, fileName);
         var journal = new FileJournal(path);
 
         await journal.AppendAsync(
             new JournalEntry
             {
                 Op = JournalOp.SessionBegin,
-                SessionId = "armed",
+                SessionId = sessionId,
                 MachineBootedAtUtcTicks = MachineBoot.At().UtcTicks,
+                MachineUptimeMs = MachineBoot.UptimeMs(),
                 OwnerProcessId = ownerProcessId,
                 OwnerStartedAtUtcTicks = ownerStartedAtUtcTicks,
             },
@@ -43,7 +52,7 @@ public sealed class BootRecoveryOwnershipTests
             new JournalEntry
             {
                 Op = JournalOp.Capture,
-                SessionId = "armed",
+                SessionId = sessionId,
                 Key = "confine:ambient-domain",
                 MutationType = "GamerGod.Core.Engine.DomainConfinementMutation",
                 Tier = MutationTier.ProcessDemotion,
@@ -54,12 +63,64 @@ public sealed class BootRecoveryOwnershipTests
         return path;
     }
 
-    private static LedgerRecoveryPass PassFor(string path) =>
+    private static LedgerRecoveryPass PassFor(params string[] paths) =>
         new(
-            [path],
+            [.. paths],
             new WindowsAmbientOperations(),
             new WindowsTopologyProvider().Classify(),
             new WindowsProcessLiveness());
+
+    [Fact]
+    public async Task A_live_session_in_one_journal_is_reported_when_the_other_is_recovered()
+    {
+        // Production ALWAYS folds two outcomes — StateLayout.Journals() returns the session
+        // journal and the bench journal — and every test here passed exactly one, so the
+        // single-outcome shortcut in Combine was the only path any of them took. The
+        // multi-outcome path dropped LeftToTheirOwner, and RecoveryOutcome.Explain() reads it in
+        // both of its branches: with a live session retained on one journal and a clean revert on
+        // the other, the event log said "Restored 1 change left behind by a session that ended
+        // without cleaning up. This machine is as it was." while a session was still fully
+        // applied. Explain()'s own doc calls that text the only record anybody will ever have of
+        // what a LocalSystem service did at three in the morning.
+        var directory = Path.Combine(Path.GetTempPath(), "GamerGod.Tests", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var self = await new WindowsProcessLiveness().IdentifyAsync(Environment.ProcessId, default);
+            Assert.NotNull(self);
+
+            // One this process still owns, and one whose owner is a start time that never was.
+            var live = await JournalForAsync(
+                directory, "session.journal", "live", self!.Value.ProcessId, self.Value.StartedAtUtcTicks);
+
+            var orphaned = await JournalForAsync(
+                directory, "bench.journal", "orphan",
+                self.Value.ProcessId, self.Value.StartedAtUtcTicks - 10_000_000L);
+
+            var outcome = await PassFor(live, orphaned).RunAsync(default);
+
+            Assert.True(outcome.HadOutstandingChanges);
+            Assert.True(outcome.IsClean, outcome.Explain());
+
+            // The orphan was put back...
+            Assert.Contains("confine:ambient-domain", outcome.Report!.Reverted);
+
+            // ...and the live one is still named, rather than silently folded away.
+            Assert.Contains("live", outcome.LeftToTheirOwner);
+
+            // The sentence the event log actually gets must not claim the machine is as it was.
+            Assert.DoesNotContain("This machine is as it was", outcome.Explain(), StringComparison.Ordinal);
+            Assert.Contains("still running", outcome.Explain(), StringComparison.Ordinal);
+
+            // And the live session's record survives, so nothing else concludes it is finished.
+            Assert.True(await new MutationLedger(new FileJournal(live), new NoResolver())
+                .HasOutstandingChangesAsync());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 
     [Fact]
     public async Task A_session_this_process_still_owns_survives_a_service_restart()
