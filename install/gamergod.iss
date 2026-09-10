@@ -10,7 +10,7 @@
 ;   2. iscc install\gamergod.iss
 
 #define AppName "GamerGod"
-#define AppVersion "1.8.0"
+#define AppVersion "1.8.1"
 #define AppPublisher "GamerGod contributors"
 #define AppUrl "https://github.com/kosherplay-betatester/GamerGod-Microsoft-Sucks-Edition"
 #define CliExe "gamergod.exe"
@@ -155,6 +155,66 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
     RegisterGamerGod();
+end;
+
+{
+  Frees the files about to be overwritten, BEFORE Setup tries to overwrite them.
+
+  gmsvc.exe is held open by the running GamerGodService for as long as it is running, and
+  GamerGod.exe is held by the window. Copying over either raises Setup's file-in-use box —
+  which /SUPPRESSMSGBOXES answers for us, with Abort. The result was an upgrade that exited 5
+  and left the machine on a mixture of versions: a new gamergod.exe beside an old gmsvc.exe and
+  an old app. Seen on a real upgrade, not reasoned about.
+
+  PrepareToInstall is the hook that runs before the [Files] stage. Returning '' means proceed;
+  any other string aborts with that message shown.
+
+  Install-GamerGod.ps1 registers and starts the service again afterwards, so stopping it here
+  costs nothing but the seconds of the copy.
+}
+function ServiceStopped(): Boolean;
+var
+  Code: Integer;
+begin
+  { ERRORLEVEL 1 from `sc query` means the service does not exist, which is also "not running". }
+  Result := not (Exec(ExpandConstant('{cmd}'),
+    '/C sc query GamerGodService | find "RUNNING" > nul', '',
+    SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0));
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Code, Waited: Integer;
+begin
+  Result := '';
+  NeedsRestart := False;
+
+  { The desktop app and any command-line copy. /F because a window mid-dialog will not close
+    politely, and nothing here is holding unsaved work — an armed session lives in the journal
+    on disk, not in the process. }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM GamerGod.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM gamergod.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+
+  if ServiceStopped() then
+    Exit;
+
+  Exec(ExpandConstant('{sys}\net.exe'), 'stop GamerGodService /y', '', SW_HIDE, ewWaitUntilTerminated, Code);
+
+  { Polled rather than assumed: `net stop` returns once the stop is requested, and a service
+    that is mid-revert can take a moment to actually let go of its own binary. }
+  Waited := 0;
+  while (Waited < 30) and (not ServiceStopped()) do
+  begin
+    Sleep(500);
+    Waited := Waited + 1;
+  end;
+
+  if not ServiceStopped() then
+    Result :=
+      'GamerGod''s background service could not be stopped, so its program file cannot be '
+      + 'replaced.' #13#10 #13#10
+      + 'Stop it from Services, or restart Windows, and run this installer again. Nothing has '
+      + 'been changed.';
 end;
 
 {
