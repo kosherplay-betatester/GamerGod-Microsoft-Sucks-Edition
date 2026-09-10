@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -27,6 +28,7 @@ using GamerGod.Ui.Audio;
 using GamerGod.Ui.Library;
 using GamerGod.Ui.Overlay;
 using GamerGod.Ui.Settings;
+using GamerGod.Ui.Tray;
 using GamerGod.Windows;
 
 namespace GamerGod.Ui;
@@ -49,6 +51,19 @@ public partial class MainWindow : Window
     private ImmutableArray<GameTile> _libraryTiles = [];
     private ImmutableArray<AppTile> _appTiles = [];
     private string _catalogueSummary = string.Empty;
+    private TrayMenu? _tray;
+
+    /// <summary>
+    /// Set once the user has genuinely asked to leave, so the close handler stops intercepting.
+    ///
+    /// <para>
+    /// Needed because closing is asynchronous here: turning Game Mode off means brokering an
+    /// elevated command, and a <c>Closing</c> handler cannot await. So the first close is
+    /// cancelled, the work is done, and then the window is closed again for real — and without
+    /// this flag that second close would ask the same question a second time, forever.
+    /// </para>
+    /// </summary>
+    private bool _exiting;
 
     /// <summary>Catalogue headings with their rows, so a search can hide both together.</summary>
     private readonly List<(TextBlock Heading, List<(CatalogueEntry Entry, Border Card)> Entries)> _catalogueGroups = [];
@@ -125,6 +140,7 @@ public partial class MainWindow : Window
         }
 
         ApplySettingsToControls();
+        BuildTray();
 
         _sounds.Enabled = _settings.SoundEnabled;
         _sounds.Volume = _settings.SoundVolume;
@@ -145,6 +161,222 @@ public partial class MainWindow : Window
         {
             await CheckForUpdatesAsync(announceResult: false);
         }
+    }
+
+    // ---------------------------------------------------------------- notification area
+
+    /// <summary>
+    /// Puts GamerGod in the notification area and keeps it there for the life of the window.
+    ///
+    /// <para>
+    /// Always present, not only while minimised. Game Mode outlives this window by design, so
+    /// the icon is the honest indicator of a machine that is still partitioned — hiding it while
+    /// the window is open would mean the one moment it disappears is the moment it starts being
+    /// the only thing telling you.
+    /// </para>
+    /// </summary>
+    private void BuildTray()
+    {
+        _tray = new TrayMenu(
+            isArmed: () => MasterSwitch.IsChecked == true,
+            games: () => [.. _libraryTiles.Select(t => t.Entry)],
+            setArmed: on => _ = TrayToggleAsync(on),
+            launch: game => _ = TrayLaunchAsync(game),
+            show: RestoreFromTray,
+            exit: () => _ = ExitAsync());
+
+        _tray.Show();
+        _tray.RefreshTooltip();
+
+        StateChanged += OnStateChangedForTray;
+        Closing += OnClosingAsync;
+        Closed += (_, _) => _tray?.Dispose();
+    }
+
+    private void OnStateChangedForTray(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized && _settings.MinimiseToTray)
+        {
+            // Out of the taskbar entirely, so minimising is a real "get out of the way" rather
+            // than moving the window from one place you can see it to another.
+            Hide();
+            ShowInTaskbar = false;
+        }
+    }
+
+    private void RestoreFromTray()
+    {
+        ShowInTaskbar = true;
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private async Task TrayToggleAsync(bool on)
+    {
+        if (MasterSwitch.IsChecked == on)
+        {
+            return;
+        }
+
+        MasterSwitch.IsChecked = on;
+        await ApplyAsync(on);
+
+        _tray?.RefreshTooltip();
+        _tray?.Notify(
+            "GamerGod",
+            MasterSwitch.IsChecked == true
+                ? "Game Mode is on. Background work has been moved out of your games' way."
+                : "Game Mode is off. Your machine is exactly as it was.");
+    }
+
+    /// <summary>
+    /// Launching from the notification area, where there is no window to explain anything in.
+    ///
+    /// <para>
+    /// So it asks first, and asks the whole question at once. Clicking a game in a menu is not
+    /// the same as agreeing to have the machine's scheduling repartitioned, and from here the
+    /// user cannot see whether Game Mode is even on — the prompt says which of the two things is
+    /// about to happen rather than assuming.
+    /// </para>
+    /// </summary>
+    private async Task TrayLaunchAsync(GameEntry game)
+    {
+        var armed = MasterSwitch.IsChecked == true;
+
+        var question = armed
+            ? $"Launch {game.Name}?\n\nGame Mode is already on."
+            : $"Launch {game.Name}, and turn Game Mode on?\n\n"
+              + "Game Mode moves background apps off your game's cores. Everything it changes "
+              + "is put back when you turn it off, and rebooting puts it back regardless.";
+
+        // Shown from the tray, so it needs an owner that is actually on screen — a hidden window
+        // owns a dialog nobody can see and the application looks frozen.
+        var wasHidden = !IsVisible;
+        if (wasHidden)
+        {
+            RestoreFromTray();
+        }
+
+        var answer = MessageBox.Show(
+            question, "GamerGod", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.OK)
+        {
+            if (wasHidden)
+            {
+                WindowState = WindowState.Minimized;
+            }
+
+            return;
+        }
+
+        await LaunchGameAsync(game, askToArm: false);
+    }
+
+    // ---------------------------------------------------------------- exit
+
+    /// <summary>
+    /// Closing the window, which is not the same as ending the session.
+    ///
+    /// <para>
+    /// A session is journalled so it can outlive this process, and closing the window has never
+    /// reverted anything — deliberately. But somebody who closes GamerGod without realising their
+    /// machine is still partitioned has been surprised by it, and that is worth one question.
+    /// </para>
+    /// </summary>
+    private async void OnClosingAsync(object? sender, CancelEventArgs e)
+    {
+        if (_exiting)
+        {
+            return;
+        }
+
+        // Closing means closing. An earlier version of this turned the close button into
+        // "minimise" whenever the notification-area setting was on — which is on by default, so
+        // "ask before closing while Game Mode is on" would have been a setting that could never
+        // fire. Minimising is what the minimise button is for.
+        if (MasterSwitch.IsChecked != true)
+        {
+            // Nothing is applied, so there is nothing to ask about and nothing to put back.
+            return;
+        }
+
+        // Everything below has to happen before the window goes, and a Closing handler cannot
+        // await. So this close is cancelled and re-issued once the work is done.
+        e.Cancel = true;
+        await ExitAsync();
+    }
+
+    /// <summary>
+    /// Leaves for good, honouring the two exit settings.
+    ///
+    /// <para>
+    /// Reached from the close button and from the notification area's Exit. Both mean the same
+    /// thing and must behave the same way, which is why neither does this itself.
+    /// </para>
+    /// </summary>
+    private async Task ExitAsync()
+    {
+        if (_exiting)
+        {
+            return;
+        }
+
+        // Set before the work, not after it, and cleared again if the user backs out.
+        //
+        // Turning Game Mode off means brokering an elevated command, which takes seconds — and
+        // startup is still running during them. "Turn Game Mode on when GamerGod starts" fires
+        // from the end of the load path, so on a machine where that setting is on it armed a
+        // fresh session immediately after the exit had just reverted one, and the app closed
+        // leaving the machine partitioned by a session nobody asked for. Seen in a test, not
+        // reasoned about: the journal showed the revert and then a new arm, in that order.
+        _exiting = true;
+
+        var armed = MasterSwitch.IsChecked == true;
+
+        if (armed && !_settings.DisarmOnExit && _settings.AskBeforeExit)
+        {
+            if (!IsVisible)
+            {
+                RestoreFromTray();
+            }
+
+            var answer = MessageBox.Show(
+                "Game Mode is still on.\n\n"
+                + "Turn it off and put your machine back before closing?\n\n"
+                + "Yes — restore everything, then close.\n"
+                + "No — close and leave Game Mode on. 'gamergod off' or a restart undoes it.\n"
+                + "Cancel — stay open.",
+                "GamerGod",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question);
+
+            switch (answer)
+            {
+                case MessageBoxResult.Cancel:
+                    // Staying open, so this is not an exit after all.
+                    _exiting = false;
+                    return;
+
+                case MessageBoxResult.Yes:
+                    MasterSwitch.IsChecked = false;
+                    await ApplyAsync(turnOn: false);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+        else if (armed && _settings.DisarmOnExit)
+        {
+            // Asked for as a setting, so it happens without a second question.
+            MasterSwitch.IsChecked = false;
+            await ApplyAsync(turnOn: false);
+        }
+
+        _tray?.Dispose();
+        Close();
     }
 
     // ---------------------------------------------------------------- topology
@@ -301,6 +533,15 @@ public partial class MainWindow : Window
 
     private async Task ApplyAsync(bool turnOn, string? ownerExecutable = null)
     {
+        // Nothing may arm the machine once the application has committed to leaving. Turning
+        // Game Mode off is an elevated call that takes seconds, and startup can still be running
+        // during them — without this, "arm when GamerGod starts" armed a fresh session
+        // immediately after the exit had reverted one.
+        if (turnOn && _exiting)
+        {
+            return;
+        }
+
         MasterSwitch.IsEnabled = false;
 
         try
@@ -308,10 +549,16 @@ public partial class MainWindow : Window
             if (turnOn)
             {
                 await TurnOnAsync(ownerExecutable);
+                await ShowChangedProcessesAsync(ChangeDirection.Applied);
             }
             else
             {
+                // Read before the revert, because a clean revert can compact the very entries
+                // that describe what it undid — and "what was put back" is exactly what the
+                // user is about to be shown.
+                var undone = await ReadPendingAccountAsync();
                 await TurnOffAsync();
+                ShowAccount(undone);
             }
         }
         catch (Exception ex)
@@ -613,6 +860,58 @@ public partial class MainWindow : Window
         ReceiptCard.Visibility = Visibility.Visible;
     }
 
+    /// <summary>
+    /// Lists every process the last session touched, and what was done to each.
+    ///
+    /// <para>
+    /// Read back from the journal rather than from a receipt, because the desktop app usually is
+    /// not the process that applied anything — writing the journal needs administrator rights it
+    /// does not have, so it shells out and gets back an exit code. The journal is the one account
+    /// both paths share, and it is the same file the service would recover from. If the list a
+    /// user reads and the list a crash is recovered from could disagree, the interface would be
+    /// describing a machine nobody has.
+    /// </para>
+    /// </summary>
+    private async Task<SessionAccount> ReadPendingAccountAsync(
+        ChangeDirection direction = ChangeDirection.Restored)
+    {
+        try
+        {
+            var entries = await new FileJournal(JournalPath).ReadAllAsync(default);
+            return SessionAccount.ReadLatest(entries, direction);
+        }
+        catch (Exception)
+        {
+            // The list is an explanation, not a guarantee. Losing it must never look like a
+            // failure of the thing it describes.
+            return SessionAccount.Empty;
+        }
+    }
+
+    private async Task ShowChangedProcessesAsync(ChangeDirection direction) =>
+        ShowAccount(await ReadPendingAccountAsync(direction));
+
+    private void ShowAccount(SessionAccount account)
+    {
+        if (account.IsEmpty)
+        {
+            ChangedCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var count = account.Processes.Length;
+
+        ChangedTitle.Text = account.Direction == ChangeDirection.Applied
+            ? $"{count} background process(es) moved out of your game's way"
+            : $"{count} background process(es) put back exactly as they were";
+
+        ChangedItems.ItemsSource = account.Machine
+            .Concat(account.Processes.Select(p => p.Describe()))
+            .ToImmutableArray();
+
+        ChangedCard.Visibility = Visibility.Visible;
+    }
+
     // ---------------------------------------------------------------- library
 
     private async void Library_Refresh(object sender, RoutedEventArgs e)
@@ -848,9 +1147,33 @@ public partial class MainWindow : Window
             return;
         }
 
-        var game = tile.Entry;
         LaunchButton.IsEnabled = false;
 
+        try
+        {
+            await LaunchGameAsync(tile.Entry, askToArm: _settings.AskToArmOnLaunch);
+        }
+        finally
+        {
+            LaunchButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Starts a game, and decides — or asks — whether to arm the machine for it first.
+    ///
+    /// <para>
+    /// Shared by the Launch button and the notification-area menu, because they mean the same
+    /// thing and drifting apart would mean one of them quietly stopped asking.
+    /// </para>
+    /// </summary>
+    /// <param name="askToArm">
+    /// Whether to ask before turning Game Mode on. False when the caller has already asked —
+    /// the tray menu puts both questions in one prompt, and asking twice for one click is worse
+    /// than not asking at all.
+    /// </param>
+    private async Task LaunchGameAsync(GameEntry game, bool askToArm)
+    {
         try
         {
             // Arm first, then launch. The other order would start the game onto a machine that
@@ -863,8 +1186,24 @@ public partial class MainWindow : Window
             // by its own launcher and nothing here ever sees it.
             if (MasterSwitch.IsChecked != true)
             {
-                MasterSwitch.IsChecked = true;
-                await ApplyAsync(turnOn: true, OwnerExecutableFor(game));
+                // Launching a game used to arm the machine silently. That is a change to how the
+                // whole computer is scheduled, made on the strength of a click that meant "start
+                // my game" — so it is offered rather than assumed, and declining still launches.
+                var arm = !askToArm || MessageBox.Show(
+                    $"Turn Game Mode on for {game.Name}?\n\n"
+                    + "Background apps move off your game's cores while you play. Everything "
+                    + "GamerGod changes is put back when you turn it off, and rebooting puts it "
+                    + "back regardless.\n\n"
+                    + "Cancel launches the game without changing anything.",
+                    "GamerGod",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Question) == MessageBoxResult.OK;
+
+                if (arm)
+                {
+                    MasterSwitch.IsChecked = true;
+                    await ApplyAsync(turnOn: true, OwnerExecutableFor(game));
+                }
             }
 
             var armed = MasterSwitch.IsChecked == true;
@@ -904,7 +1243,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            LaunchButton.IsEnabled = true;
+            _tray?.RefreshTooltip();
         }
     }
 
@@ -2356,6 +2695,10 @@ public partial class MainWindow : Window
     private void ApplySettingsToControls()
     {
         OptConfine.IsChecked = _settings.ConfineToAmbientDomain;
+        OptAskToArm.IsChecked = _settings.AskToArmOnLaunch;
+        OptMinimiseToTray.IsChecked = _settings.MinimiseToTray;
+        OptDisarmOnExit.IsChecked = _settings.DisarmOnExit;
+        OptAskBeforeExit.IsChecked = _settings.AskBeforeExit;
         OptEfficiency.IsChecked = _settings.DemoteToEfficiencyMode;
         OptServices.IsChecked = _settings.SuppressBackgroundServices;
         OptPower.IsChecked = _settings.ManagePowerScheme;
@@ -2390,6 +2733,10 @@ public partial class MainWindow : Window
             SoundOnNavigation = OptNavSound.IsChecked == true,
             ConfirmBeforeApplying = OptConfirm.IsChecked == true,
             ArmOnLaunch = OptArmOnLaunch.IsChecked == true,
+            AskToArmOnLaunch = OptAskToArm.IsChecked == true,
+            MinimiseToTray = OptMinimiseToTray.IsChecked == true,
+            DisarmOnExit = OptDisarmOnExit.IsChecked == true,
+            AskBeforeExit = OptAskBeforeExit.IsChecked == true,
             FetchCoverArt = OptCoverArt.IsChecked == true,
             OverlayEnabled = OptOverlay.IsChecked == true,
             CheckForUpdates = OptUpdates.IsChecked == true,

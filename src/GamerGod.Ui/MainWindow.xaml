@@ -306,6 +306,41 @@
                                 </StackPanel>
                             </Border>
 
+                            <!--
+                                What actually happened, process by process.
+
+                                Read back from the journal rather than from a receipt: the app is
+                                usually not the process that applied anything — writing the
+                                journal needs rights this window does not have — so it shells out
+                                and gets an exit code. The journal is the one account both paths
+                                share, and it is the same file the service recovers from.
+
+                                Height-capped and scrollable because this is routinely sixty
+                                lines on a real desktop, and a card that pushes the core map off
+                                the screen every time Game Mode is switched is a card that gets
+                                switched off.
+                            -->
+                            <Border x:Name="ChangedCard" Style="{StaticResource Card}"
+                                    Margin="0,14,0,0" Visibility="Collapsed">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Eyebrow}" Text="WHAT CHANGED" />
+                                    <TextBlock x:Name="ChangedTitle" Style="{StaticResource BodyText}"
+                                               Foreground="{StaticResource Ink}" />
+                                    <ScrollViewer MaxHeight="240" Margin="0,10,0,0"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl x:Name="ChangedItems">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Style="{StaticResource Mono}" Text="{Binding}"
+                                                               TextWrapping="Wrap" Margin="0,2,8,0" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+
                             <!-- The core map: the thing nobody else can draw. -->
                             <Border Style="{StaticResource Card}" Margin="0,14,0,0">
                                 <StackPanel>
@@ -816,6 +851,62 @@
                                                        Text="Skip the switch. Rebooting still undoes everything." />
                                         </StackPanel>
                                         <CheckBox x:Name="OptArmOnLaunch" Style="{StaticResource Switch}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Click="Setting_Changed" />
+                                    </Grid>
+
+                                    <Rectangle Height="1" Fill="{StaticResource LineSoft}" Margin="0,14,0,14" />
+
+                                    <Grid>
+                                        <StackPanel Margin="0,0,70,0">
+                                            <TextBlock Style="{StaticResource H2}" FontSize="13.5"
+                                                       Text="Ask before turning Game Mode on for a game" />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Text="Launching a game used to repartition your machine silently. With this on you are asked first, and saying no still launches the game." />
+                                        </StackPanel>
+                                        <CheckBox x:Name="OptAskToArm" Style="{StaticResource Switch}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Click="Setting_Changed" />
+                                    </Grid>
+
+                                    <Rectangle Height="1" Fill="{StaticResource LineSoft}" Margin="0,14,0,14" />
+
+                                    <Grid>
+                                        <StackPanel Margin="0,0,70,0">
+                                            <TextBlock Style="{StaticResource H2}" FontSize="13.5"
+                                                       Text="Minimise to the notification area" />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Text="Minimising hides the window instead of leaving it in the taskbar. The GamerGod icon stays next to the clock, with Game Mode and a Library Quick Launch menu on it — right-click any time, double-click to bring the window back." />
+                                        </StackPanel>
+                                        <CheckBox x:Name="OptMinimiseToTray" Style="{StaticResource Switch}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Click="Setting_Changed" />
+                                    </Grid>
+
+                                    <Rectangle Height="1" Fill="{StaticResource LineSoft}" Margin="0,14,0,14" />
+
+                                    <Grid>
+                                        <StackPanel Margin="0,0,70,0">
+                                            <TextBlock Style="{StaticResource H2}" FontSize="13.5"
+                                                       Text="Turn Game Mode off when GamerGod closes" />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Text="Off by default. A session is written down so it can outlive this window on purpose — closing the app to get it out of the way should not cost your game its cores. Switch this on if you would rather it did." />
+                                        </StackPanel>
+                                        <CheckBox x:Name="OptDisarmOnExit" Style="{StaticResource Switch}"
+                                                  HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                  Click="Setting_Changed" />
+                                    </Grid>
+
+                                    <Rectangle Height="1" Fill="{StaticResource LineSoft}" Margin="0,14,0,14" />
+
+                                    <Grid>
+                                        <StackPanel Margin="0,0,70,0">
+                                            <TextBlock Style="{StaticResource H2}" FontSize="13.5"
+                                                       Text="Ask before closing while Game Mode is on" />
+                                            <TextBlock Style="{StaticResource BodyText}" FontSize="12.5"
+                                                       Text="Offers to put your machine back first. Ignored when the setting above is on, because you have already answered." />
+                                        </StackPanel>
+                                        <CheckBox x:Name="OptAskBeforeExit" Style="{StaticResource Switch}"
                                                   HorizontalAlignment="Right" VerticalAlignment="Center"
                                                   Click="Setting_Changed" />
                                     </Grid>

@@ -55,11 +55,57 @@ public sealed record UiSettings
     /// <summary>Show what would change and wait for confirmation before applying anything.</summary>
     public bool ConfirmBeforeApplying { get; init; }
 
-    /// <summary>Close to the notification area rather than exiting.</summary>
+    /// <summary>
+    /// Minimise to the notification area instead of the taskbar, and keep a menu there.
+    ///
+    /// <para>
+    /// This property existed for a long time and nothing read it — a preference that promised a
+    /// behaviour the build did not have. It does now.
+    /// </para>
+    /// </summary>
     public bool MinimiseToTray { get; init; } = true;
 
     /// <summary>Turn Game Mode on as soon as GamerGod starts.</summary>
     public bool ArmOnLaunch { get; init; }
+
+    /// <summary>
+    /// Ask, rather than assume, when a game is launched while Game Mode is off.
+    ///
+    /// <para>
+    /// On by default. Launching a game used to arm the machine silently, which is a change to
+    /// how the whole computer is scheduled made on the strength of a click that meant "start my
+    /// game". Asking costs one keypress and removes the surprise.
+    /// </para>
+    /// </summary>
+    public bool AskToArmOnLaunch { get; init; } = true;
+
+    /// <summary>
+    /// Turn Game Mode off when GamerGod closes.
+    ///
+    /// <para>
+    /// Off by default, and that default is deliberate rather than lazy: a session is journalled
+    /// precisely so it can outlive the window, and somebody who armed the machine and closed the
+    /// app to get it out of the way has not asked for their game to lose its cores. Turning this
+    /// on says they would rather it did.
+    /// </para>
+    /// </summary>
+    public bool DisarmOnExit { get; init; }
+
+    /// <summary>
+    /// Ask before closing while Game Mode is still on, and offer to turn it off first.
+    ///
+    /// <para>
+    /// On by default. The one thing a user should never do is close GamerGod without realising
+    /// their machine is still partitioned — the state is recoverable either way, but not knowing
+    /// about it is how somebody ends up wondering why their desktop feels wrong an hour later.
+    /// </para>
+    ///
+    /// <para>
+    /// Redundant when <see cref="DisarmOnExit"/> is on, and skipped in that case: being asked a
+    /// question whose answer you have already given as a setting is noise.
+    /// </para>
+    /// </summary>
+    public bool AskBeforeExit { get; init; } = true;
 
     /// <summary>
     /// Allow art for titles whose store cached none locally to be downloaded from that store's

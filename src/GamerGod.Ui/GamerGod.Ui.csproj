@@ -4,6 +4,31 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+
+    <!--
+      For the notification-area icon and its menu, and for that alone.
+
+      WPF has no equivalent, and the alternative was Shell_NotifyIcon plus a message-only window
+      plus a menu, which would have meant roughly a hundred lines of new P/Invoke. The Charter
+      constrains what GamerGod does to a machine, not which framework draws a menu — but the
+      native surface is the audit surface, and the smallest one that works is the right one.
+    -->
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!--
+      WFO0003 tells a WinForms application to move its DPI awareness out of the manifest and
+      into Application.SetHighDpiMode. This is not a WinForms application. It is WPF, which
+      reads DPI awareness from the manifest and has no such API, and the analyzer cannot tell
+      the difference once UseWindowsForms is set.
+
+      Suppressed here and nowhere else, narrowly and by number. Doing what it asks would break
+      rendering on every high-DPI display to satisfy a rule about a framework this app only
+      borrows a notification-area icon from.
+
+      Note this is NOT one of the banned-API rules the Charter forbids suppressing — those are
+      enforced by CharterComplianceTests, which reads the source rather than the build.
+    -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <AssemblyName>GamerGod</AssemblyName>
     <RootNamespace>GamerGod.Ui</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -28,6 +53,19 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <!--
+    UseWindowsForms adds these to every file implicitly, and WinForms and WPF share a great many
+    type names — Application, Button, Brush, Color, KeyEventArgs. Left in, every one of those
+    becomes ambiguous across a WPF codebase that was unambiguous before, and the fix would be to
+    fully qualify hundreds of unrelated lines to buy one notification-area icon.
+
+    Removed here, so only Tray/TrayMenu.cs imports them, and it does so explicitly.
+  -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\GamerGod.Core\GamerGod.Core.csproj" />
