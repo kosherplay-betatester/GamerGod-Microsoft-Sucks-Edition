@@ -324,20 +324,34 @@
                                     Margin="0,14,0,0" Visibility="Collapsed">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource Eyebrow}" Text="WHAT CHANGED" />
-                                    <TextBlock x:Name="ChangedTitle" Style="{StaticResource BodyText}"
-                                               Foreground="{StaticResource Ink}" />
-                                    <ScrollViewer MaxHeight="240" Margin="0,10,0,0"
-                                                  VerticalScrollBarVisibility="Auto"
-                                                  HorizontalScrollBarVisibility="Disabled">
-                                        <ItemsControl x:Name="ChangedItems">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Style="{StaticResource Mono}" Text="{Binding}"
-                                                               TextWrapping="Wrap" Margin="0,2,8,0" />
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
+
+                                    <!-- The whole answer, in one sentence. -->
+                                    <TextBlock x:Name="ChangedTitle" Style="{StaticResource H2}"
+                                               FontSize="15" Margin="0,2,0,0" TextWrapping="Wrap" />
+
+                                    <!-- Grouped by what happened, because "58 programs were set to
+                                         efficiency mode" is the fact and the names are a footnote. -->
+                                    <ItemsControl x:Name="ChangedGroups" Margin="0,12,0,0" />
+
+                                    <!-- Everything, for anyone who wants it. Collapsed, because
+                                         sixty lines of "name (1234) — ..." is what made this
+                                         unreadable in the first place. -->
+                                    <Expander x:Name="ChangedDetail" Margin="0,10,0,0"
+                                              Header="Show every program" Foreground="{StaticResource InkFaint}"
+                                              FontSize="12">
+                                        <ScrollViewer MaxHeight="220" Margin="0,8,0,0"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsControl x:Name="ChangedItems">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Style="{StaticResource Mono}" Text="{Binding}"
+                                                                   TextWrapping="Wrap" Margin="0,2,8,0" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </Expander>
                                 </StackPanel>
                             </Border>
 

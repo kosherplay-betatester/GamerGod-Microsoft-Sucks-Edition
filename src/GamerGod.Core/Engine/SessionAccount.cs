@@ -12,6 +12,40 @@ public enum ChangeDirection
     Restored,
 }
 
+/// <summary>
+/// One thing that happened, and how many programs it happened to.
+/// </summary>
+public sealed record ChangeGroup
+{
+    /// <summary>What was done, in the words the user reads.</summary>
+    public required string Action { get; init; }
+
+    public required int Count { get; init; }
+
+    /// <summary>A few names, so the number means something concrete.</summary>
+    public required ImmutableArray<string> Examples { get; init; }
+
+    /// <summary>"64 programs" / "1 program".</summary>
+    public string Amount => Count == 1 ? "1 program" : $"{Count} programs";
+
+    /// <summary>
+    /// "Chrome, Discord, Slack and 61 more" — enough to recognise the list as yours without
+    /// printing it.
+    /// </summary>
+    public string Describe()
+    {
+        if (Examples.IsDefaultOrEmpty)
+        {
+            return string.Empty;
+        }
+
+        var shown = string.Join(", ", Examples);
+        var rest = Count - Examples.Length;
+
+        return rest > 0 ? $"{shown} and {rest} more" : shown;
+    }
+}
+
 /// <summary>One process and everything that happened to it.</summary>
 public sealed record ProcessChange
 {
@@ -24,6 +58,17 @@ public sealed record ProcessChange
 
     public string Describe() =>
         $"{Name} ({ProcessId.ToString(CultureInfo.InvariantCulture)}) — {string.Join(", ", Changes)}";
+
+    /// <summary>
+    /// The program's name as a person would say it, without the process id.
+    ///
+    /// <para>
+    /// Process ids belong in a log, not on a dashboard. Nobody reading "was my browser moved?"
+    /// is helped by <c>(12044)</c>, and sixty lines each carrying one is what made this card
+    /// unreadable.
+    /// </para>
+    /// </summary>
+    public string FriendlyName => Name;
 }
 
 /// <summary>
@@ -59,6 +104,58 @@ public sealed record SessionAccount
     public required ImmutableArray<string> Machine { get; init; }
 
     public bool IsEmpty => Processes.IsEmpty && Machine.IsEmpty;
+
+    /// <summary>
+    /// One sentence a person can read at a glance.
+    ///
+    /// <para>
+    /// The card used to open with a list. On a real desktop that is sixty lines of
+    /// <c>name (1234) — moved off your game's cores, set to efficiency mode</c>, which answers
+    /// "what happened to my machine" only if you are willing to read all sixty. This answers it
+    /// in one line, and the detail stays available underneath for anyone who wants it.
+    /// </para>
+    /// </summary>
+    public string Headline
+    {
+        get
+        {
+            if (Processes.IsEmpty)
+            {
+                return Machine.IsEmpty
+                    ? "Nothing needed changing."
+                    : Direction == ChangeDirection.Applied
+                        ? "Your machine was already out of your games' way."
+                        : "Your machine is exactly as it was.";
+            }
+
+            var n = Processes.Length;
+            var programs = n == 1 ? "1 background program" : $"{n} background programs";
+
+            return Direction == ChangeDirection.Applied
+                ? $"{programs} moved out of your games' way."
+                : $"{programs} put back exactly as they were.";
+        }
+    }
+
+    /// <summary>
+    /// What happened, grouped by the thing that happened rather than by which program it
+    /// happened to — because "58 programs were set to efficiency mode" is the fact, and the
+    /// names are the footnote.
+    /// </summary>
+    public ImmutableArray<ChangeGroup> Groups =>
+    [
+        .. Processes
+            .SelectMany(p => p.Changes.Select(change => (change, p.Name)))
+            .GroupBy(x => x.change, StringComparer.Ordinal)
+            .Select(g => new ChangeGroup
+            {
+                Action = g.Key,
+                Count = g.Count(),
+                Examples = [.. g.Select(x => x.Name).Distinct(StringComparer.OrdinalIgnoreCase).Take(6)],
+            })
+            .OrderByDescending(g => g.Count)
+            .ThenBy(g => g.Action, StringComparer.Ordinal),
+    ];
 
     public static SessionAccount Empty { get; } = new()
     {

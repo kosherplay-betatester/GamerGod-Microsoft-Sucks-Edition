@@ -54,6 +54,12 @@ public partial class MainWindow : Window
     private TrayMenu? _tray;
 
     /// <summary>
+    /// Holds the administrator rights this window asked consent for, for as long as it is open.
+    /// Created on the first privileged action and stopped when the window closes.
+    /// </summary>
+    private ElevatedBroker? _broker;
+
+    /// <summary>
     /// Set once the user has genuinely asked to leave, so the close handler stops intercepting.
     ///
     /// <para>
@@ -190,7 +196,15 @@ public partial class MainWindow : Window
 
         StateChanged += OnStateChangedForTray;
         Closing += OnClosingAsync;
-        Closed += (_, _) => _tray?.Dispose();
+        Closed += (_, _) =>
+        {
+            _tray?.Dispose();
+
+            // An elevated process must not outlive the window that asked for it. Fire and
+            // forget because Closed cannot await, and the helper exits on the pipe closing
+            // regardless of whether this call gets to finish.
+            _ = _broker?.DisposeAsync().AsTask();
+        };
     }
 
     private void OnStateChangedForTray(object? sender, EventArgs e)
@@ -688,15 +702,20 @@ public partial class MainWindow : Window
         // defaults, which meant the dialog above listed the user's settings and the machine
         // then got a different set — unticking confinement still confined, and ticking service
         // suppression stopped nothing.
+        // Through the elevated helper, which asks for permission once and then stays for the life
+        // of the window. Every arm and every disarm used to be its own runas and therefore its
+        // own consent prompt — including one before the window was usable, for anyone who had
+        // asked GamerGod to arm on launch. A prompt that frequent stops being read.
+        _broker ??= new ElevatedBroker();
+
         var result = turnOn
-            ? await Elevation.RunAsync(
+            ? await _broker.RunAsync(
                 verb,
-                default,
                 [
                     .. LeverArguments.Render(OptionsFromSettings(dryRun: false)),
                     .. OwnerArguments.RenderExecutable(ownerExecutable),
                 ])
-            : await Elevation.RunAsync(verb, default);
+            : await _broker.RunAsync(verb);
 
         switch (result.Outcome)
         {
@@ -735,6 +754,16 @@ public partial class MainWindow : Window
                         result.Problem ?? "gamergod.exe is missing.",
                         "Reinstalling GamerGod puts it back.",
                     ]);
+                break;
+
+            // 4 is "already on", and it is not a failure worth an alarm. It happens the ordinary
+            // way: Game Mode was armed on launch, or from the notification area, or in a shell —
+            // and then the switch was pressed. Reporting "Nothing was changed" over a machine
+            // that is very much changed was the confusing part.
+            case ElevationOutcome.Failed when turnOn && result.ExitCode == 4:
+                ShowReceipt(
+                    "Game Mode was already on.",
+                    ["Nothing needed changing. Press the switch again to turn it off."]);
                 break;
 
             default:
@@ -899,17 +928,86 @@ public partial class MainWindow : Window
             return;
         }
 
-        var count = account.Processes.Length;
+        ChangedTitle.Text = account.Headline;
 
-        ChangedTitle.Text = account.Direction == ChangeDirection.Applied
-            ? $"{count} background process(es) moved out of your game's way"
-            : $"{count} background process(es) put back exactly as they were";
+        ChangedGroups.Items.Clear();
 
-        ChangedItems.ItemsSource = account.Machine
-            .Concat(account.Processes.Select(p => p.Describe()))
+        foreach (var group in account.Groups)
+        {
+            ChangedGroups.Items.Add(ChangeRow(group.Amount, group.Action, group.Describe()));
+        }
+
+        // Services and the power plan: already whole sentences, and about the machine rather
+        // than about a program, so they are not counted in with the programs above.
+        foreach (var line in account.Machine)
+        {
+            ChangedGroups.Items.Add(ChangeRow(null, line, null));
+        }
+
+        ChangedItems.ItemsSource = account.Processes
+            .Select(p => p.Describe())
             .ToImmutableArray();
 
+        ChangedDetail.IsExpanded = false;
+        ChangedDetail.Visibility = account.Processes.IsEmpty ? Visibility.Collapsed : Visibility.Visible;
         ChangedCard.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// One line of the summary: a count, what happened, and a few names underneath so the number
+    /// means something concrete.
+    /// </summary>
+    private Border ChangeRow(string? amount, string action, string? examples)
+    {
+        var text = new StackPanel();
+        var head = new StackPanel { Orientation = Orientation.Horizontal };
+
+        if (amount is not null)
+        {
+            head.Children.Add(new TextBlock
+            {
+                Text = amount,
+                FontFamily = (FontFamily)FindResource("Data"),
+                FontSize = 12.5,
+                Foreground = (Brush)FindResource("Signal"),
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+        }
+
+        head.Children.Add(new TextBlock
+        {
+            Text = action,
+            Style = (Style)FindResource("BodyText"),
+            FontSize = 13,
+            Foreground = (Brush)FindResource("Ink"),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        text.Children.Add(head);
+
+        if (!string.IsNullOrEmpty(examples))
+        {
+            text.Children.Add(new TextBlock
+            {
+                Text = examples,
+                Style = (Style)FindResource("BodyText"),
+                FontSize = 11.5,
+                Foreground = (Brush)FindResource("InkFaint"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 2, 0, 0),
+            });
+        }
+
+        return new Border
+        {
+            Margin = new Thickness(0, 0, 0, 8),
+            Padding = new Thickness(11, 9, 11, 9),
+            CornerRadius = new CornerRadius(3),
+            Background = (Brush)FindResource("Sunk"),
+            Child = text,
+        };
     }
 
     // ---------------------------------------------------------------- library

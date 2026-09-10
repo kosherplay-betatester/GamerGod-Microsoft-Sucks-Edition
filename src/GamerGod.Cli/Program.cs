@@ -78,6 +78,12 @@ try
                 ownerExecutable: OwnerArguments.FindExecutable(args));
         }
 
+        case "broker":
+            // Started by the desktop application, not typed. It holds the administrator rights
+            // the window asked consent for once, and serves on/off over a pipe restricted to the
+            // account that launched it, so switching Game Mode does not raise a prompt each time.
+            return await BrokerCommand.RunAsync(ValueAfter(args, "--pipe") ?? string.Empty);
+
         case "claim":
         {
             // Spawned by 'gamergod on --owner-exe', not typed. It waits for a game to start and
