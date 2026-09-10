@@ -37,7 +37,8 @@ public sealed class GameTile : INotifyPropertyChanged
     private GameTile(GameEntry entry)
     {
         Entry = entry;
-        _cover = Load(LocalArtPath(entry));
+        ArtFile = LocalArtPath(entry);
+        _cover = Load(ArtFile);
         Fallback = TileArt.Gradient(entry.Name);
         Initial = TileArt.Initial(entry.Name);
     }
@@ -71,6 +72,18 @@ public sealed class GameTile : INotifyPropertyChanged
     }
 
     public bool HasCover => Cover is not null;
+
+    /// <summary>
+    /// The art file on disk, when there is one.
+    ///
+    /// <para>
+    /// Exposed because the notification-area menu needs a 16-pixel bitmap and WPF's decoded
+    /// <see cref="Cover"/> is the wrong kind of object for a WinForms menu item. Handing over the
+    /// path lets that side decode it once, at the size it actually draws, instead of converting
+    /// a 360-pixel-wide image every time the menu opens.
+    /// </para>
+    /// </summary>
+    public string? ArtFile { get; private set; }
 
     /// <summary>
     /// True when the only art available is landscape, which changes how the tile draws it.
@@ -128,6 +141,9 @@ public sealed class GameTile : INotifyPropertyChanged
             return false;
         }
 
+        // Kept in step with the cover, so a menu icon built later uses the art that just
+        // arrived rather than the absence it was created with.
+        ArtFile = path;
         Cover = image;
         return true;
     }

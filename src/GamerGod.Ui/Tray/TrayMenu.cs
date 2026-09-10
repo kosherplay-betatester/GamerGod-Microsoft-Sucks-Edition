@@ -8,6 +8,16 @@ using GamerGod.Core.Library;
 namespace GamerGod.Ui.Tray;
 
 /// <summary>
+/// One game as the notification-area menu needs it: the entry to launch, and a picture of it.
+/// </summary>
+/// <param name="Entry">The game.</param>
+/// <param name="Icon">
+/// A 16-pixel bitmap, or null when this machine has neither cover art nor a readable executable
+/// to take one from. Owned by the cache that built it, never disposed here.
+/// </param>
+public sealed record QuickLaunchGame(GameEntry Entry, System.Drawing.Image? Icon);
+
+/// <summary>
 /// The notification-area icon and the menu behind it.
 ///
 /// <para>
@@ -40,7 +50,7 @@ public sealed class TrayMenu : IDisposable
 
     private readonly NotifyIcon _icon;
     private readonly Func<bool> _isArmed;
-    private readonly Func<ImmutableArray<GameEntry>> _games;
+    private readonly Func<ImmutableArray<QuickLaunchGame>> _games;
     private readonly Action<bool> _setArmed;
     private readonly Action<GameEntry> _launch;
     private readonly Action _show;
@@ -50,7 +60,7 @@ public sealed class TrayMenu : IDisposable
 
     public TrayMenu(
         Func<bool> isArmed,
-        Func<ImmutableArray<GameEntry>> games,
+        Func<ImmutableArray<QuickLaunchGame>> games,
         Action<bool> setArmed,
         Action<GameEntry> launch,
         Action show,
@@ -172,19 +182,29 @@ public sealed class TrayMenu : IDisposable
 
         if (games.IsDefaultOrEmpty)
         {
-            // Distinguishes "no games" from "the library has not been read yet", because the
-            // second is fixed by opening the window and the first is not.
-            quick.DropDownItems.Add(new ToolStripMenuItem("No games found yet") { Enabled = false });
+            // This used to be the normal state rather than the exceptional one: the library was
+            // only scanned when somebody opened the Library page, so anybody who went straight
+            // to the notification area found an empty menu. It is scanned at startup now, and
+            // this line means what it says.
+            quick.DropDownItems.Add(new ToolStripMenuItem("No games found") { Enabled = false });
             return quick;
         }
 
         foreach (var game in games.Take(MaximumGames))
         {
-            var entry = game;
+            var entry = game.Entry;
 
             // The store is in the label because two launchers routinely list the same title, and
             // a menu with the same word twice is a menu you cannot choose from.
-            var item = new ToolStripMenuItem($"{entry.Name}   ·   {entry.SourceLabel}");
+            var item = new ToolStripMenuItem($"{entry.Name}   ·   {entry.SourceLabel}")
+            {
+                // The game's own artwork, so this is a menu you recognise rather than read.
+                // Null for a title with neither cover art nor a readable executable, which
+                // leaves the name — still a working entry.
+                Image = game.Icon,
+                ImageScaling = ToolStripItemImageScaling.None,
+            };
+
             item.Click += (_, _) => _launch(entry);
             quick.DropDownItems.Add(item);
         }

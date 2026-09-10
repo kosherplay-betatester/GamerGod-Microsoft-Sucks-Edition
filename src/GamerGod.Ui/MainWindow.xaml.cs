@@ -53,6 +53,9 @@ public partial class MainWindow : Window
     private string _catalogueSummary = string.Empty;
     private TrayMenu? _tray;
 
+    /// <summary>Menu artwork, decoded once per game rather than on every right-click.</summary>
+    private readonly TrayIconCache _trayIcons = new();
+
     /// <summary>
     /// Holds the administrator rights this window asked consent for, for as long as it is open.
     /// Created on the first privileged action and stopped when the window closes.
@@ -161,6 +164,21 @@ public partial class MainWindow : Window
             await ApplyAsync(turnOn: true);
         }
 
+        // The library is scanned now rather than when somebody opens the Library page.
+        //
+        // It used to be loaded lazily, on first navigation to that page, and the notification
+        // area's Library Quick Launch reads the same list — so anybody who minimised GamerGod
+        // and right-clicked without ever visiting Library found an empty menu saying no games
+        // were found. Nothing was wrong with the scan; it had simply never been asked for.
+        //
+        // Not awaited: it reads store manifests off disk and takes a moment on a large library,
+        // and nothing in the window depends on it being finished.
+        if (!_libraryLoaded)
+        {
+            _libraryLoaded = true;
+            _ = LoadLibraryAsync();
+        }
+
         // Last, and only if asked. Nothing about the window depends on it, so a slow or
         // unreachable GitHub delays nothing the user can see.
         if (_settings.CheckForUpdates)
@@ -185,7 +203,7 @@ public partial class MainWindow : Window
     {
         _tray = new TrayMenu(
             isArmed: () => MasterSwitch.IsChecked == true,
-            games: () => [.. _libraryTiles.Select(t => t.Entry)],
+            games: () => [.. _libraryTiles.Select(t => new QuickLaunchGame(t.Entry, _trayIcons.For(t.Entry, t.ArtFile)))],
             setArmed: on => _ = TrayToggleAsync(on),
             launch: game => _ = TrayLaunchAsync(game),
             show: RestoreFromTray,
@@ -199,6 +217,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _tray?.Dispose();
+            _trayIcons.Dispose();
 
             // An elevated process must not outlive the window that asked for it. Fire and
             // forget because Closed cannot await, and the helper exits on the pipe closing
