@@ -69,9 +69,21 @@ public sealed record SessionReceipt
 
         if (lines.Count == 0)
         {
-            lines.Add(WasDryRun
-                ? "Nothing would change. Your machine is already out of your game's way."
-                : "Nothing needed changing. Your machine was already out of your game's way.");
+            // "Nothing needed changing" is only true when nothing was refused. It used to be
+            // printed over a session the safety gate had blocked in full, so a machine that had
+            // just declined to do anything reported that it was already perfectly arranged.
+            lines.Add(Refused.IsEmpty
+                ? WasDryRun
+                    ? "Nothing would change. Your machine is already out of your game's way."
+                    : "Nothing needed changing. Your machine was already out of your game's way."
+                : $"Nothing was applied: {Count(Refused.Length, "change")} refused.");
+        }
+
+        // Named, and said out loud. A lever a user switched on and did not get is the one thing
+        // this receipt must never leave out.
+        if (!Refused.IsEmpty && lines.Count > 0 && !lines[0].StartsWith("Nothing was applied", StringComparison.Ordinal))
+        {
+            lines.Add($"{Count(Refused.Length, "change")} refused: {string.Join(", ", Refused)}.");
         }
 
         if (!Failed.IsEmpty)
@@ -231,16 +243,41 @@ public sealed class AmbientEngine(IAmbientOperations os, MutationLedger ledger)
             .ConfigureAwait(false);
 
         var safety = SafetyGate.Evaluate(mutations, restoreStatus);
+        var refusedBySafety = ImmutableArray<string>.Empty;
+
         if (!safety.MayProceed)
         {
-            return new SessionReceipt
+            // Only the changes the gate objects to are dropped — not the whole session.
+            //
+            // This refused everything, and the effect was that Game Mode could not be turned on
+            // at all on an ordinary machine. The power lever is boot-persistent (the active power
+            // scheme is stored in the registry), System Protection is off on most gaming
+            // installs, so the gate blocked — and the engine then discarded the confinement and
+            // the efficiency demotion too, which are Ambient, die with their processes, and were
+            // never what the gate was worried about. The command reported success, applied
+            // nothing, and the switch in the app flipped straight back to off because the journal
+            // was empty.
+            //
+            // The gate's own explanation says the options are to turn System Protection on, drop
+            // those changes, or accept the risk. Dropping *those* changes is what this now does.
+            var blocked = safety.BootPersistentKeys.ToHashSet(StringComparer.Ordinal);
+            var allowed = mutations.Where(m => !blocked.Contains(m.Key)).ToImmutableArray();
+
+            if (allowed.IsEmpty)
             {
-                SessionId = sessionId,
-                Applied = [],
-                Refused = [.. mutations.Select(m => m.Key)],
-                Failed = [],
-                IntegritySummary = safety.Explanation,
-            };
+                // Nothing survives the filter, so there is genuinely nothing to do.
+                return new SessionReceipt
+                {
+                    SessionId = sessionId,
+                    Applied = [],
+                    Refused = [.. mutations.Select(m => m.Key)],
+                    Failed = [],
+                    IntegritySummary = safety.Explanation,
+                };
+            }
+
+            refusedBySafety = [.. mutations.Where(m => blocked.Contains(m.Key)).Select(m => m.Key)];
+            mutations = allowed;
         }
 
         if (options.DryRun)
@@ -276,9 +313,15 @@ public sealed class AmbientEngine(IAmbientOperations os, MutationLedger ledger)
         {
             SessionId = sessionId,
             Applied = report.Applied,
-            Refused = report.Refused,
+
+            // Both kinds of refusal, because a user asked for a lever and did not get it either
+            // way. The policy engine refuses a Contact change to a protected title; the safety
+            // gate refuses a change that would outlive a reboot with no restore point.
+            Refused = [.. report.Refused, .. refusedBySafety],
             Failed = report.Failed,
-            IntegritySummary = permit.Explain(),
+            IntegritySummary = refusedBySafety.IsEmpty
+                ? permit.Explain()
+                : permit.Explain() + " " + safety.Explanation,
             ProcessesDemoted = AppliedCount(
                 mutations.OfType<EfficiencyModeMutation>().FirstOrDefault(),
                 m => m.Key,

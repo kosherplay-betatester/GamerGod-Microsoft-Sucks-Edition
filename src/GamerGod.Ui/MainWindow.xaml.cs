@@ -901,13 +901,38 @@ public partial class MainWindow : Window
     /// describing a machine nobody has.
     /// </para>
     /// </summary>
+    /// <param name="onlyWhileApplied">
+    /// Require the session to still be applied before describing it.
+    ///
+    /// <para>
+    /// True when reporting an arm, and that is the fix for a card that described a machine
+    /// nobody had. The journal keeps finished sessions, so "the latest session" is not the same
+    /// as "what is on this machine now" — and when an arm was refused or declined, the card
+    /// still rendered the previous session's list. Opening the app was enough to see it: with
+    /// "arm on launch" enabled, the attempt failed and ninety-six programs were reported as
+    /// moved while Game Mode was off.
+    /// </para>
+    ///
+    /// <para>
+    /// False when reporting a revert, where the account is deliberately read <em>before</em> the
+    /// revert makes it untrue.
+    /// </para>
+    /// </param>
     private async Task<SessionAccount> ReadPendingAccountAsync(
-        ChangeDirection direction = ChangeDirection.Restored)
+        ChangeDirection direction = ChangeDirection.Restored, bool onlyWhileApplied = false)
     {
         try
         {
-            var entries = await new FileJournal(JournalPath).ReadAllAsync(default);
-            return SessionAccount.ReadLatest(entries, direction);
+            var journal = new FileJournal(JournalPath);
+
+            if (onlyWhileApplied
+                && !await new MutationLedger(journal, new AmbientResolver(_operations, _topology))
+                    .HasOutstandingChangesAsync())
+            {
+                return SessionAccount.Empty;
+            }
+
+            return SessionAccount.ReadLatest(await journal.ReadAllAsync(default), direction);
         }
         catch (Exception)
         {
@@ -918,7 +943,7 @@ public partial class MainWindow : Window
     }
 
     private async Task ShowChangedProcessesAsync(ChangeDirection direction) =>
-        ShowAccount(await ReadPendingAccountAsync(direction));
+        ShowAccount(await ReadPendingAccountAsync(direction, onlyWhileApplied: true));
 
     private void ShowAccount(SessionAccount account)
     {
