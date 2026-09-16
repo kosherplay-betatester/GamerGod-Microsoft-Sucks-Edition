@@ -2,13 +2,41 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using GamerGod.Windows;
 
 namespace GamerGod.Ui;
 
 public partial class App : Application
 {
+    /// <summary>
+    /// Held for the life of the process by the one copy of GamerGod that owns the window.
+    /// Null in a second copy, which exits before it builds anything.
+    /// </summary>
+    public static SingleInstance? Instance { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        // One window per signed-in user, and a second launch brings the first one forward.
+        //
+        // Two copies is not cosmetic. Each puts its own icon in the notification area — which is
+        // how it was noticed — each holds its own elevated helper, so a permission prompt already
+        // approved gets asked again by an identical-looking window, and both read and write the
+        // same journal: one could arm while the other still believed the machine was untouched.
+        //
+        // Claimed before anything else, so a second copy never gets as far as creating a tray
+        // icon, scanning a library, or asking for consent.
+        Instance = SingleInstance.TryAcquire();
+
+        if (Instance is null)
+        {
+            // Already running, and it has been asked to show itself. Nothing to report: the user
+            // pressed GamerGod and a GamerGod window is about to be in front of them.
+            Shutdown();
+            return;
+        }
+
+        Exit += (_, _) => Instance?.Dispose();
+
         // An unhandled exception in a tool that changes system state must not vanish into a
         // silent process exit. The user needs to know something went wrong and, more
         // importantly, that rebooting undoes anything that was applied.

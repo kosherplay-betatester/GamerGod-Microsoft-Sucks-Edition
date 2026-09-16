@@ -212,6 +212,17 @@ public partial class MainWindow : Window
         _tray.Show();
         _tray.RefreshTooltip();
 
+        // Someone started GamerGod again. Rather than a second window — or a message telling
+        // them where the first one went — the one they already have comes to the front, which is
+        // what pressing the shortcut meant.
+        //
+        // The signal arrives on a thread-pool thread, so it is marshalled here before anything
+        // touches a window.
+        if (App.Instance is { } instance)
+        {
+            instance.ActivationRequested += () => Dispatcher.BeginInvoke(RestoreFromTray);
+        }
+
         StateChanged += OnStateChangedForTray;
         Closing += OnClosingAsync;
         Closed += (_, _) =>
@@ -241,8 +252,29 @@ public partial class MainWindow : Window
     {
         ShowInTaskbar = true;
         Show();
-        WindowState = WindowState.Normal;
+
+        // Only when it is actually minimised: forcing Normal would un-maximise a window the user
+        // had maximised, which is a worse surprise than not moving it at all.
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        // Activate asks for the foreground, and Windows is entitled to refuse: only a process
+        // that currently holds it may hand it over, and the copy that knocked does that before
+        // it exits. Measured, and the refusal is real — restoring from a second launch left the
+        // window visible but behind whatever was in front.
+        //
+        // So it is also raised above the stack for a moment. Topmost needs no permission, and
+        // dropping it immediately means the window does not stay pinned over everything
+        // afterwards — which would be its own bug, and a nasty one over a game.
         Activate();
+
+        var wasTopmost = Topmost;
+        Topmost = true;
+        Topmost = wasTopmost;
+
+        Focus();
     }
 
     private async Task TrayToggleAsync(bool on)
